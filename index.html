@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="mn">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="VELTRIX — Унадаг дугуйн сэлбэг, аксессуарын онлайн дэлгүүр.">
+  <title>VELTRIX | Bicycle Store</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <header>
+    <div class="wrap nav">
+      <a class="logo" href="#home">VELTRI<span>X</span><small>ONLINE STORE</small></a>
+      <nav>
+        <a href="#home">Нүүр</a>
+        <a href="#shop">Дэлгүүр</a>
+        <a href="#order-tracking">Захиалга хянах</a>
+        <a href="#reviews">Сэтгэгдэл</a>
+        <a href="#about">Бидний тухай</a>
+        <a href="#contact">Холбоо барих</a>
+      </nav>
+      <div class="auth-actions" id="authActions">
+        <button class="auth-btn login-btn" type="button" onclick="openAuth('login')">Нэвтрэх</button>
+        <button class="auth-btn register-btn" type="button" onclick="openAuth('register')">Бүртгүүлэх</button>
+      </div>
+      <div class="auth-actions user-menu" id="userActions" hidden>
+        <button class="header-profile-btn" id="headerUserName" type="button" onclick="toggleUserMenu()"
+          aria-expanded="false" aria-label="Хэрэглэгчийн цэс">
+          <img id="headerProfileImage" alt="Профайл зураг" hidden>
+          <span id="headerProfilePlaceholder">👤</span>
+        </button>
+        <div class="user-dropdown" id="userDropdown" hidden>
+          <button type="button" onclick="openAccount()">Миний бүртгэл</button>
+          <button type="button" onclick="openAccountOrders()">Миний захиалгууд</button>
+          <button type="button" onclick="logoutUser()">Гарах</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <section class="hero" id="home">
+      <div class="wrap">
+        <div class="hero-copy">
+          <div class="eyebrow">RIDE MORE. WORRY LESS.</div>
+          <h1>ДУГУЙНХАА<br><span>ХЭРЭГЦЭЭГ НЭГ ДОР!</span></h1>
+          <p>Дугуйн чанартай сэлбэг, хэрэгтэй аксессуараа VELTRIX-ээс сонгоорой.</p>
+          <div class="actions">
+            <a class="btn" href="#shop">▦ Бараа үзэх　→</a>
+            <a class="btn alt" href="tel:88960776">☎ 8896-0776</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="shop-section" id="shop">
+      <div class="wrap">
+        <div class="section-kicker">VELTRIX ONLINE STORE</div>
+        <h2 class="section-title">Дугуйн сэлбэг, аксессуар</h2>
+        <p class="muted">VELTRIX дэлгүүрийн бараанууд. Үнэ болон үлдэгдлийг шинэчилсэн мэдээллээр харуулна.</p>
+
+        <div class="shop-toolbar">
+          <input id="shopSearch" type="search" placeholder="Барааны нэрээр хайх...">
+          <select id="shopCategory">
+            <option value="">Бүх ангилал</option>
+            <option>Тоормос</option>
+            <option>Араа</option>
+            <option>Сэрээ</option>
+            <option>Дугуй</option>
+            <option>Аксессуар</option>
+            <option>Бусад</option>
+          </select>
+        </div>
+
+        <button type="button" id="cartToggle" class="cart-toggle" aria-label="Сагс нээх">
+          🛒 <span id="cartBadge">0</span>
+        </button>
+
+        <div class="cart-panel" id="cartPanel">
+          <div class="cart-heading">
+            <h3>🛒 Миний сагс</h3>
+            <span id="cartCount">0 бараа</span>
+          </div>
+          <div id="cartItems">
+            <p class="muted">Таны сагс хоосон байна.</p>
+          </div>
+          <div class="cart-total">
+            <strong>Нийт дүн:</strong>
+            <strong id="cartTotal">0 ₮</strong>
+          </div>
+          <button type="button" id="checkoutButton" disabled>Захиалга өгөх</button>
+        </div>
+
+        <p id="shopCount" class="muted" aria-live="polite">Бараа ачаалж байна...</p>
+        <div id="shopProducts" class="shop-products">
+          <p class="muted">Бараа ачаалж байна...</p>
+        </div>
+      </div>
+    </section>
+
+
+
+
+
+
+
+    <section class="extra-section" id="reviews">
+      <div class="wrap">
+        <div class="section-kicker">CUSTOMER REVIEWS</div>
+        <h2 class="section-title">Хэрэглэгчдийн сэтгэгдэл</h2>
+        <div id="reviewList" class="review-grid">
+          <p class="muted">Одоогоор сэтгэгдэл алга байна.</p>
+        </div>
+        <form id="reviewForm" class="review-form">
+          <h3>Сэтгэгдэл үлдээх</h3>
+          <div class="review-fields">
+            <label>Таны нэр<input id="reviewName" type="text" placeholder="Нэр" required maxlength="40"></label>
+            <label>Үнэлгээ
+              <select id="reviewRating">
+                <option value="5">★★★★★ — 5</option>
+                <option value="4">★★★★☆ — 4</option>
+                <option value="3">★★★☆☆ — 3</option>
+                <option value="2">★★☆☆☆ — 2</option>
+                <option value="1">★☆☆☆☆ — 1</option>
+              </select>
+            </label>
+          </div>
+          <label>Сэтгэгдэл<textarea id="reviewText" rows="3"
+              placeholder="Бараа бүтээгдэхүүний талаар сэтгэгдлээ бичнэ үү" required maxlength="500"></textarea></label>
+          <button class="auth-submit" type="submit">Сэтгэгдэл илгээх</button>
+        </form>
+      </div>
+    </section>
+
+
+
+    <section id="about">
+      <div class="wrap about-grid">
+        <div>
+          <div class="section-kicker">ABOUT VELTRIX</div>
+          <h2 class="section-title">Бидний тухай</h2>
+          <p class="muted">VELTRIX бол дугуйн сэлбэг, аксессуарын онлайн дэлгүүр. Бид таны дугуйн хэрэгцээнд тохирсон
+            бүтээгдэхүүнийг санал болгоно.</p>
+          <div class="promise">
+            <div>Чанартай сэлбэг, аксессуар</div>
+            <div>Хэрэгцээнд тохирсон сонголт</div>
+            <div>Дугуйн хэрэглээг илүү хялбар болгоно</div>
+          </div>
+        </div>
+        <div class="about-photo" role="img" aria-label="VELTRIX дугуйн дэлгүүр"></div>
+      </div>
+    </section>
+
+    <section class="contact" id="contact">
+      <div class="wrap contact-grid">
+        <div>
+          <div class="section-kicker">CONTACT US</div>
+          <h2 class="section-title">VELTRIX-тэй холбогдоорой</h2>
+          <p class="muted">Бараа бүтээгдэхүүн болон захиалгын талаар утсаар холбогдоорой.</p>
+          <a class="btn" href="tel:88960776">☎ Холбогдох　→</a>
+        </div>
+        <div class="contact-panel">
+          <div class="contact-row">📞 <b>Утас:</b> <a href="tel:88960776">8896-0776</a></div>
+          <div class="contact-row">🚲 <b>Чиглэл:</b> Дугуйн сэлбэг, аксессуар худалдаа</div>
+          <div class="contact-row">📍 <b>Байршил:</b> <a href="https://maps.app.goo.gl/yvdutor8FEatvMhr7"
+              target="_blank" rel="noopener">Google Maps дээр харах ↗</a></div>
+          <div class="contact-row">🕒 <b>Захиалга:</b> Утсаар холбогдож лавлана уу</div>
+        </div>
+      </div>
+    </section>
+
+
+    <section class="order-tracking-section" id="order-tracking">
+      <div class="wrap">
+        <div class="section-kicker">VELTRIX ORDER TRACKING</div>
+        <h2>Захиалгаа хянах</h2>
+        <p>Захиалгын дугаар болон бүртгүүлсэн утасны дугаараа оруулна уу.</p>
+
+        <form id="orderTrackingForm">
+          <label for="trackingOrderNumber">Захиалгын дугаар</label>
+          <input id="trackingOrderNumber" type="text" required placeholder="Жишээ: VX-ABC123">
+
+          <label for="trackingPhone">Утасны дугаар</label>
+          <input id="trackingPhone" type="tel" required placeholder="Захиалга хийхдээ ашигласан дугаар">
+
+          <button type="submit" id="trackOrderButton">Захиалга шалгах</button>
+        </form>
+
+        <div id="trackingResult" aria-live="polite"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="modal-backdrop" id="authBackdrop" onclick="backdropClose(event)">
+    <section class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+      <button class="modal-close" type="button" aria-label="Хаах" onclick="closeAuth()">×</button>
+      <div class="section-kicker">VELTRIX MEMBER</div>
+      <h2 id="authTitle">Нэвтрэх</h2>
+      <p id="authDescription">Бүртгэлтэй бол утасны дугаар, нууц үгээ оруулна уу.</p>
+      <form class="auth-form" id="authForm" onsubmit="submitAuth(event)">
+        <label>Утасны дугаар<input id="authPhone" type="tel" placeholder="Жишээ: 99112233" required
+            pattern="[0-9+() -]{8,16}"></label>
+        <label id="nameField" hidden>Нэр<input id="authName" type="text" placeholder="Таны нэр"></label>
+        <label>Нууц үг<input id="authPassword" type="password" placeholder="Нууц үгээ оруулна уу" minlength="6"
+            required></label>
+        <label id="confirmField" hidden>Нууц үг давтах<input id="authConfirm" type="password"
+            placeholder="Нууц үгээ дахин оруулна уу" minlength="6"></label>
+        <button class="auth-submit" id="authSubmit" type="submit">Нэвтрэх</button>
+      </form>
+      <div class="auth-note" id="authNote"></div>
+      <div class="auth-switch" id="authSwitch">Бүртгэлгүй юу? <button type="button"
+          onclick="openAuth('register')">Бүртгүүлэх</button></div>
+    </section>
+  </div>
+
+
+  <div class="checkout-backdrop" id="checkoutBackdrop" hidden>
+    <section class="checkout-modal" role="dialog" aria-modal="true">
+      <button type="button" id="closeCheckout" class="modal-close">×</button>
+      <div class="section-kicker">VELTRIX ORDER</div>
+      <h2>Захиалга баталгаажуулах</h2>
+
+      <form id="checkoutForm">
+        <label>Таны нэр
+          <input id="orderName" type="text" required maxlength="100" placeholder="Овог нэр">
+        </label>
+
+        <label>Утасны дугаар
+          <input id="orderPhone" type="tel" required pattern="[0-9+() -]{8,20}" placeholder="88960776">
+        </label>
+
+        <label>Бараагаа хэрхэн авах вэ?
+          <select id="deliveryType" required>
+            <option value="delivery">Хүргэлтээр авах</option>
+            <option value="pickup">Дэлгүүрээс өөрөө авах</option>
+          </select>
+        </label>
+
+        <label id="addressField">Хүргэлтийн хаяг
+          <textarea id="orderAddress" rows="2" placeholder="Дүүрэг, хороо, байр, тоот"></textarea>
+        </label>
+
+        <label>Төлбөрийн хэлбэр
+          <select id="paymentMethod" required>
+            <option value="cash">Бэлэн мөнгө</option>
+            <option value="transfer">Дансаар шилжүүлэх</option>
+          </select>
+        </label>
+
+        <label>Нэмэлт тэмдэглэл (заавал биш)
+          <textarea id="orderNote" rows="2" maxlength="500"></textarea>
+        </label>
+
+        <p id="checkoutMessage" class="muted"></p>
+        <button type="submit" id="submitOrder" class="auth-submit">Захиалга баталгаажуулах</button>
+      </form>
+    </section>
+  </div>
+
+
+  <div class="modal-backdrop" id="accountBackdrop">
+    <section class="auth-modal account-modal" role="dialog" aria-modal="true">
+      <button class="modal-close" type="button" onclick="closeAccount()">×</button>
+      <div class="section-kicker">VELTRIX MEMBER</div>
+      <h2>Миний бүртгэл</h2>
+
+      <div class="profile-photo-area">
+        <img id="profilePreview" alt="Профайл зураг" hidden>
+        <div id="profilePhotoPlaceholder">👤</div>
+
+        <label class="auth-submit profile-file-label" for="profileFile">
+          Зураг сонгох
+        </label>
+        <input id="profileFile" type="file" accept="image/jpeg,image/png,image/webp" hidden
+          onchange="uploadProfilePhoto(event)">
+        <p class="muted">JPG, PNG, WEBP · 700KB хүртэл</p>
+        <p id="profilePhotoMessage" class="muted"></p>
+      </div>
+
+      <form class="auth-form account-form" onsubmit="saveAccountProfile(event)">
+        <h3>Хувийн мэдээлэл</h3>
+
+        <label>Нэр
+          <input id="accountName" type="text" minlength="2" maxlength="100" required>
+        </label>
+
+        <label>Утасны дугаар
+          <input id="accountPhone" type="tel" minlength="8" maxlength="15" pattern="[0-9+() -]{8,16}" required>
+        </label>
+
+        <p id="accountProfileMessage" class="muted"></p>
+        <button type="submit" class="auth-submit">Мэдээлэл хадгалах</button>
+      </form>
+
+      <form class="auth-form account-form" onsubmit="saveAccountPassword(event)">
+        <h3>Нууц үг солих</h3>
+
+        <label>Одоогийн нууц үг
+          <input id="currentPassword" type="password" minlength="8" required>
+        </label>
+
+        <label>Шинэ нууц үг
+          <input id="newPassword" type="password" minlength="8" maxlength="72" required>
+        </label>
+
+        <label>Шинэ нууц үг давтах
+          <input id="confirmNewPassword" type="password" minlength="8" maxlength="72" required>
+        </label>
+
+        <p id="accountPasswordMessage" class="muted"></p>
+        <button type="submit" class="auth-submit">Нууц үг солих</button>
+      </form>
+
+    </section>
+  </div>
+
+  <div class="modal-backdrop" id="ordersBackdrop">
+    <section class="auth-modal orders-modal" role="dialog" aria-modal="true">
+      <button class="modal-close" type="button" onclick="closeAccountOrders()">×</button>
+      <div class="section-kicker">VELTRIX MEMBER</div>
+      <h2>Миний захиалгууд</h2>
+      <div id="accountOrders">
+        <p class="muted">Захиалгууд хараахан ачаалагдаагүй байна.</p>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <div class="wrap foot">
+      <span>© 2026 VELTRIX Online Store</span>
+      <span>Таны дугуйн хэрэгцээ — VELTRIX дээр!</span>
+    </div>
+  </footer>
+
+
+  <!-- VELTRIX LIVE CHAT -->
+  <div class="chat-widget" id="chatWidget">
+    <button class="chat-toggle" id="chatToggle" type="button" onclick="toggleChat()">
+      💬 Чат
+    </button>
+
+    <section class="chat-panel" id="chatPanel" hidden>
+      <header class="chat-header">
+        <div>
+          <strong>VELTRIX тусламж</strong>
+          <small>Бид танд туслахад бэлэн байна</small>
+        </div>
+        <button type="button" class="chat-close" onclick="toggleChat()">×</button>
+      </header>
+
+      <div class="chat-login-notice" id="chatLoginNotice" hidden>
+        <p>Чат ашиглахын тулд хэрэглэгчээр нэвтэрнэ үү.</p>
+        <button type="button" onclick="openAuth('login')">Нэвтрэх</button>
+      </div>
+
+      <div class="chat-messages" id="chatMessages">
+        <p class="muted">Чат ачаалж байна...</p>
+      </div>
+
+      <form class="chat-form" id="chatForm">
+        <input type="text" id="chatInput" maxlength="1000" placeholder="Мессеж бичих..." autocomplete="off" required>
+        <button type="submit" id="chatSend">➤</button>
+      </form>
+    </section>
+  </div>
+  <!-- VELTRIX LIVE CHAT END -->
+
+  <script src="script.js"></script>
+</body>
+
+</html>

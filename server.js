@@ -4,2190 +4,1746 @@ const express = require("express");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const cors = require("cors");
-const crypto = require("crypto");
-const path = require("path");
-const { v2: cloudinary } = require("cloudinary");
-const rateLimit = require("express-rate-limit");
+const cookieParser = require("cookie-parser");
 const helmet = require("helmet");
-const webpush = require("web-push");
+const rateLimit = require("express-rate-limit");
 
 const app = express();
 
-const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || "";
-const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || "";
-const vapidSubject = process.env.VAPID_SUBJECT || "https://veltrix-bike-shop.onrender.com";
+const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const MONGODB_URI = process.env.MONGODB_URI;
+const ADMIN_PATH = (process.env.ADMIN_PATH || "").replace(/\/+$/, "");
 
-const pushReady = Boolean(vapidPublicKey && vapidPrivateKey);
-
-if (pushReady) {
-  webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+if (!ADMIN_PATH.startsWith("/") || ADMIN_PATH.length < 10) {
+  throw new Error("ADMIN_PATH is missing or invalid.");
 }
 
-// Trust proxy for reverse proxies (Render, Cloudflare, etc.)
-app.set("trust proxy", 1);
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  throw new Error("JWT_SECRET must be at least 32 characters.");
+}
 
-// Helmet security headers (configured to safely permit Google Fonts, Cloudinary, and dynamic onclicks)
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-        fontSrc: ["'self'", "https://fonts.gstatic.com"],
-        imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
-        connectSrc: ["'self'", "https://api.cloudinary.com"],
-        objectSrc: ["'none'"],
-        upgradeInsecureRequests: process.env.NODE_ENV === "production" ? [] : null
-      }
-    },
-    crossOriginEmbedderPolicy: false
-  })
-);
+if (!ADMIN_PASSWORD || !MONGODB_URI) {
+  throw new Error("ADMIN_PASSWORD or MONGODB_URI is missing from .env");
+}
 
-// Strict CORS Configuration
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim()).filter(Boolean)
-  : [];
-
-const defaultOrigins = [
-  "https://veltrix-bike-shop.onrender.com",
-  /^http:\/\/localhost(:\d+)?$/,
-  /^http:\/\/127\.0\.0\.1(:\d+)?$/
-];
-
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-
-    const matches = defaultOrigins.some(pattern =>
-      typeof pattern === "string" ? pattern === origin : pattern.test(origin)
-    );
-
-    if (matches) return callback(null, true);
-    return callback(new Error("CORS бодлогын дагуу хандах эрхгүй байна"));
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-};
-
-app.use(cors(corsOptions));
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: "2mb" }));
-app.use(express.static("public", {
-  etag: true,
-  setHeaders(res, filePath) {
-    if (filePath.endsWith("sw.js") || filePath.endsWith("index.html")) {
-      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-    } else {
-      res.setHeader("Cache-Control", "public, max-age=86400, must-revalidate");
-    }
+app.use(cookieParser());
+
+// Зөвхөн вебсайтад шаардлагатай файлуудыг нээнэ.
+const path = require("path");
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "index.html")));
+app.get("/index.html", (req, res) => res.sendFile(path.join(__dirname, "index.html")));
+// Нууц админ самбарын зам
+app.get(ADMIN_PATH, (req, res) => {
+  if (req.path === ADMIN_PATH) {
+    return res.redirect(308, `${ADMIN_PATH}/`);
   }
-}));
+  return res.sendFile(path.join(__dirname, "admin.html"));
+});
+app.get(`${ADMIN_PATH}/admin.css`, (req, res) => res.sendFile(path.join(__dirname, "admin.css")));
+app.get(`${ADMIN_PATH}/admin.js`, (req, res) => res.sendFile(path.join(__dirname, "admin.js")));
+app.get("/style.css", (req, res) => res.sendFile(path.join(__dirname, "style.css")));
+app.get("/script.js", (req, res) => res.sendFile(path.join(__dirname, "script.js")));
+app.get("/logo.svg", (req, res) => res.sendFile(path.join(__dirname, "logo.svg")));
 
-/* =========================
-   DATABASE MODELS
-========================= */
 
-const Product = mongoose.model("Product", new mongoose.Schema({
-  name: { type: String, required: true, trim: true },
-  category: { type: String, default: "Сэлбэг" },
-  description: { type: String, default: "" },
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+  message: { error: "Хэт олон удаа оролдлоо. Дараа дахин оролдоно уу." }
+});
+
+const repairSchema = new mongoose.Schema({
+  repairNumber: { type: String, unique: true, index: true },
+  customerName: { type: String, trim: true, default: "" },
+  phone: { type: String, trim: true, default: "" },
+  bicycleType: { type: String, trim: true, default: "" },
+  brand: { type: String, trim: true, default: "" },
+  model: { type: String, trim: true, default: "" },
+  issue: { type: String, trim: true, default: "" },
+  photos: { type: [String], default: [] },
+  partsUsed: { type: String, default: "" },
+  mechanic: { type: String, default: "" },
+  laborCost: { type: Number, min: 0, default: 0 },
+  partsCost: { type: Number, min: 0, default: 0 },
+  total: { type: Number, min: 0, default: 0 },
+  status: {
+    type: String,
+    enum: ["Хүлээн авсан", "Засварт байгаа", "Бэлэн болсон", "Хүлээлгэн өгсөн", "Цуцалсан"],
+    default: "Хүлээн авсан"
+  },
+  paymentStatus: {
+    type: String,
+    enum: ["Төлөөгүй", "Хэсэгчлэн төлсөн", "Төлсөн"],
+    default: "Төлөөгүй"
+  },
+  notes: { type: String, default: "" }
+}, { timestamps: true });
+
+const Repair = mongoose.model("Repair", repairSchema);
+
+const productSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true, maxlength: 120 },
+  category: { type: String, required: true, trim: true },
   price: { type: Number, required: true, min: 0 },
-  oldPrice: { type: Number, default: 0 },
-  stock: { type: Number, default: 0, min: 0 },
-  image: { type: String, default: "" },
-  featured: { type: Boolean, default: false },
-  active: { type: Boolean, default: true },
+  cost: { type: Number, required: true, min: 0, default: 0 },
+  stock: { type: Number, required: true, min: 0, default: 0 },
+  image: { type: String, trim: true, default: "" },
+  description: { type: String, trim: true, maxlength: 1000, default: "" }
+}, { timestamps: true });
 
-  compatibility: {
-    wheelSizes: { type: [String], default: [] },
-    brakeTypes: { type: [String], default: [] },
-    speeds: { type: [Number], default: [] },
-    bikeTypes: { type: [String], default: [] }
-  }
-}, { timestamps: true }));
+const Product = mongoose.model("Product", productSchema);
 
-const StockMovement = mongoose.model("StockMovement", new mongoose.Schema({
-  productId: { type: String, required: true, index: true },
-  productName: { type: String, required: true },
-  type: { type: String, enum: ["Орлого", "Зарлага"], required: true },
-  quantity: { type: Number, required: true, min: 1 },
-  before: { type: Number, required: true, min: 0 },
-  after: { type: Number, required: true, min: 0 },
-  note: { type: String, default: "", maxlength: 300 },
-  source: { type: String, default: "manual" },
-  orderId: { type: String, default: "" },
-  eventKey: { type: String, unique: true, sparse: true, default: undefined }
-}, { timestamps: true }));
-
-// Ижил барааны мөрүүдийг нэгтгэнэ
-function combineOrderItems(items = []) {
-  const grouped = new Map();
-
-  for (const item of items) {
-    const productId = String(item?.productId || "").trim();
-    const quantity = Number(item?.quantity);
-
-    if (!productId || !Number.isSafeInteger(quantity) || quantity < 1) {
-      throw new Error("INVALID_ORDER_STOCK_ITEM");
-    }
-
-    const current = grouped.get(productId);
-
-    if (current) {
-      const total = current.quantity + quantity;
-
-      if (!Number.isSafeInteger(total)) {
-        throw new Error("INVALID_ORDER_STOCK_ITEM");
-      }
-
-      current.quantity = total;
-    } else {
-      grouped.set(productId, {
-        productId,
-        name: item.name || "Бараа",
-        quantity
-      });
-    }
-  }
-
-  return [...grouped.values()];
-}
-
-// Захиалгатай холбоотой агуулахын хөдөлгөөнийг давхардуулахгүй бүртгэнэ
-async function recordOrderStockMovements(order, type, eventName) {
-  const items = combineOrderItems(order.items || []);
-  const movements = [];
-
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    const quantity = item.quantity;
-
-    const eventKey = `${order._id}:${eventName}:${i}`;
-    const existing = await StockMovement.findOne({ eventKey });
-
-    if (existing) continue;
-
-    const product = await Product.findById(item.productId).select("name stock");
-
-    if (!product) {
-      throw new Error(`STOCK_PRODUCT_NOT_FOUND:${item.productId}`);
-    }
-
-    const after = product.stock;
-    const before = type === "Зарлага"
-      ? after + quantity
-      : after - quantity;
-
-    if (before < 0 || after < 0) {
-      throw new Error("INVALID_STOCK_MOVEMENT_BALANCE");
-    }
-
-    movements.push({
-      productId: item.productId,
-      productName: product.name || item.name || "Бараа",
-      type,
-      quantity,
-      before,
-      after,
-      note: `Захиалга ${order.code || order._id}`,
-      source: "order",
-      orderId: String(order._id),
-      eventKey
-    });
-  }
-
-  if (movements.length) {
-    try {
-      await StockMovement.insertMany(movements, { ordered: true });
-    } catch (error) {
-      await StockMovement.deleteMany({
-        eventKey: { $in: movements.map(m => m.eventKey) }
-      });
-      throw error;
-    }
-  }
-}
-
-const User = mongoose.model("User", new mongoose.Schema({
-  name: { type: String, required: true, trim: true, maxlength: 80 },
-  email: { type: String, trim: true, lowercase: true, sparse: true, unique: true },
-  phone: { type: String, trim: true, sparse: true, unique: true },
-  passwordHash: { type: String, required: true }
-}, { timestamps: true }));
-
-const Order = mongoose.model("Order", new mongoose.Schema({
-  code: { type: String, unique: true },
-  userId: { type: String, index: true },
-  customer: { type: String, required: true },
-  phone: { type: String, required: true },
-  address: { type: String, required: true },
-  note: { type: String, default: "" },
-
+const orderSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
+  orderNumber: { type: String, required: true, unique: true },
+  customerName: { type: String, required: true, trim: true },
+  phone: { type: String, required: true, trim: true },
+  deliveryType: { type: String, enum: ["delivery", "pickup"], required: true },
+  address: { type: String, trim: true, default: "" },
+  paymentMethod: { type: String, enum: ["cash", "transfer"], required: true },
+  note: { type: String, trim: true, maxlength: 500, default: "" },
   items: [{
     productId: String,
     name: String,
     price: Number,
+    cost: { type: Number, default: 0 },
     quantity: Number
   }],
-
-  total: Number,
-  subtotal: Number,
-  discount: { type: Number, default: 0 },
-  pointsUsed: { type: Number, default: 0 },
-  deliveryFee: { type: Number, default: 0 },
-
-  status: { type: String, default: "Шинэ" },
-  statusHistory: [{
-    status: { type: String, required: true },
-    changedAt: { type: Date, default: Date.now },
-    note: { type: String, default: "" }
-  }],
-  paymentMethod: { type: String, default: "Хүлээн авахдаа төлөх" },
-  paymentStatus: { type: String, default: "Төлөөгүй" },
-
-  pointsAwarded: { type: Boolean, default: false },
-  stockRestored: { type: Boolean, default: false }
-}, { timestamps: true }));
-
-const Notification = mongoose.model("Notification", new mongoose.Schema({
-  userId: { type: String, required: true, index: true },
-  orderId: { type: String, default: "" },
-  orderCode: { type: String, default: "" },
-  type: {
+  total: { type: Number, required: true, min: 0 },
+  stockDeducted: { type: Boolean, default: false },
+  status: {
     type: String,
-    enum: ["order_created", "order_status"],
+    enum: ["Шинэ", "Баталгаажсан", "Бэлтгэж байна", "Хүргэлтэд гарсан", "Дууссан", "Цуцалсан"],
+    default: "Шинэ"
+  },
+  statusHistory: [{
+    status: {
+      type: String,
+      enum: ["Шинэ", "Баталгаажсан", "Бэлтгэж байна", "Хүргэлтэд гарсан", "Дууссан", "Цуцалсан"],
+      required: true
+    },
+    changedAt: { type: Date, default: Date.now }
+  }]
+}, { timestamps: true });
+
+const Order = mongoose.model("Order", orderSchema);
+
+const userSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true, minlength: 2, maxlength: 100 },
+  phone: { type: String, required: true, unique: true, index: true },
+  profileImage: { type: String, trim: true, default: "" },
+  passwordHash: { type: String, required: true, select: false }
+}, { timestamps: true });
+
+const User = mongoose.model("User", userSchema);
+
+const chatMessageSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+    index: true
+  },
+  sender: {
+    type: String,
+    enum: ["user", "admin"],
     required: true
   },
-  title: { type: String, required: true, maxlength: 120 },
-  message: { type: String, required: true, maxlength: 300 },
-  read: { type: Boolean, default: false, index: true }
-}, { timestamps: true }));
-
-Notification.schema.index({ userId: 1, createdAt: -1 });
-
-const PushSubscription = mongoose.model("PushSubscription", new mongoose.Schema({
-  userId: { type: String, required: true, index: true },
-  endpoint: { type: String, required: true, unique: true },
-  keys: {
-    p256dh: { type: String, required: true },
-    auth: { type: String, required: true }
+  message: {
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 1000
   },
-  userAgent: { type: String, default: "", maxlength: 300 }
-}, { timestamps: true }));
+  read: {
+    type: Boolean,
+    default: false
+  }
+}, { timestamps: true });
 
-PushSubscription.schema.index({ userId: 1, createdAt: -1 });
+chatMessageSchema.index({ userId: 1, createdAt: 1 });
 
-async function createUserNotification(data) {
-  if (!data || !data.userId) return;
+const ChatMessage = mongoose.model("ChatMessage", chatMessageSchema);
+
+
+
+
+
+function requireAdmin(req, res, next) {
+  const token = req.cookies.veltrix_admin;
+
+  if (!token) {
+    return res.status(401).json({ error: "Нэвтрэх шаардлагатай." });
+  }
 
   try {
-    await Notification.create(data);
-  } catch (error) {
-    console.error("Notification create error:", error.message);
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== "admin") {
+      return res.status(403).json({ error: "Зөвшөөрөлгүй." });
+    }
+    next();
+  } catch {
+    return res.status(401).json({ error: "Нэвтрэх хугацаа дууссан. Дахин нэвтэрнэ үү." });
   }
 }
 
-async function sendPushToUser(userId, notification) {
-  if (!pushReady || !userId) return;
+
+function requireUser(req, res, next) {
+  const token = req.cookies.veltrix_user;
+
+  if (!token) {
+    return res.status(401).json({ error: "Хэрэглэгчээр нэвтэрнэ үү." });
+  }
 
   try {
-    const subscriptions = await PushSubscription.find({
-      userId: String(userId)
-    }).lean();
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== "user" || !decoded.userId) {
+      return res.status(403).json({ error: "Зөвшөөрөлгүй." });
+    }
+    req.userId = decoded.userId;
+    next();
+  } catch {
+    return res.status(401).json({ error: "Нэвтрэх хугацаа дууссан. Дахин нэвтэрнэ үү." });
+  }
+}
 
-    const payload = JSON.stringify({
-      title: notification.title || "VELTRIX",
-      body: notification.body || "",
-      url: notification.url || "/"
+
+// ===== VELTRIX LIVE CHAT API =====
+
+// Хэрэглэгч өөрийн мессежүүдийг авах
+app.get("/api/chat/messages", requireUser, async (req, res) => {
+  try {
+    const messages = await ChatMessage.find({
+      userId: req.userId
+    }).sort({ createdAt: 1 }).limit(200).lean();
+
+    await ChatMessage.updateMany(
+      { userId: req.userId, sender: "admin", read: false },
+      { $set: { read: true } }
+    );
+
+    res.json({ messages });
+  } catch (error) {
+    res.status(500).json({ error: "Чат ачааллахад алдаа гарлаа." });
+  }
+});
+
+// Хэрэглэгч мессеж илгээх
+app.post("/api/chat/messages", requireUser, async (req, res) => {
+  try {
+    const message = String(req.body?.message || "").trim();
+
+    if (!message || message.length > 1000) {
+      return res.status(400).json({
+        error: "Мессеж 1-1000 тэмдэгт байх ёстой."
+      });
+    }
+
+    const saved = await ChatMessage.create({
+      userId: req.userId,
+      sender: "user",
+      message
     });
 
-    await Promise.allSettled(subscriptions.map(async subscription => {
-      try {
-        await webpush.sendNotification({
-          endpoint: subscription.endpoint,
-          keys: subscription.keys
-        }, payload);
-      } catch (error) {
-        if (error.statusCode === 404 || error.statusCode === 410) {
-          await PushSubscription.deleteOne({ _id: subscription._id });
-        } else {
-          console.error("Push delivery error:", error.statusCode || error.message);
+    res.status(201).json({ message: saved });
+  } catch (error) {
+    res.status(500).json({ error: "Мессеж илгээж чадсангүй." });
+  }
+});
+
+// Админ бүх харилцан яриаг харах
+app.get("/api/admin/chats", requireAdmin, async (req, res) => {
+  try {
+    const chats = await ChatMessage.aggregate([
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id: "$userId",
+          lastMessage: { $first: "$$ROOT" },
+          unread: {
+            $sum: {
+              $cond: [
+                { $and: [
+                  { $eq: ["$sender", "user"] },
+                  { $eq: ["$read", false] }
+                ]},
+                1,
+                0
+              ]
+            }
+          }
+        }
+      },
+      { $sort: { "lastMessage.createdAt": -1 } },
+      { $limit: 100 },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "user"
+        }
+      },
+      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 0,
+          userId: "$_id",
+          userName: "$user.name",
+          phone: "$user.phone",
+          lastMessageId: "$lastMessage._id",
+          lastMessage: "$lastMessage.message",
+          lastAt: "$lastMessage.createdAt",
+          lastSender: "$lastMessage.sender",
+          unread: 1
         }
       }
-    }));
+    ]);
+
+    res.json({ chats });
   } catch (error) {
-    console.error("Push send error:", error.message);
+    res.status(500).json({ error: "Чатуудыг ачаалж чадсангүй." });
   }
-}
+});
 
-const Coupon = mongoose.model("Coupon", new mongoose.Schema({
-  code: { type: String, unique: true, uppercase: true, trim: true },
-  percent: { type: Number, min: 1, max: 90 },
-  active: { type: Boolean, default: true },
-  expiresAt: Date
-}, { timestamps: true }));
-
-// Онооны данс
-const Loyalty = mongoose.model("Loyalty", new mongoose.Schema({
-  phone: { type: String, unique: true, required: true },
-  points: { type: Number, default: 0 },
-  totalEarned: { type: Number, default: 0 }
-}, { timestamps: true }));
-
-// Барааны үнэлгээ
-const Review = mongoose.model("Review", new mongoose.Schema({
-  productId: { type: String, required: true },
-  orderCode: { type: String, required: true },
-  customer: { type: String, required: true },
-  phone: { type: String, required: true },
-  rating: { type: Number, min: 1, max: 5, required: true },
-  comment: { type: String, default: "", maxlength: 1000 },
-  approved: { type: Boolean, default: false }
-}, { timestamps: true }));
-
-Review.schema.index({ orderCode: 1, productId: 1 }, { unique: true });
-
-// Захиалгын чат
-const ChatMessage = mongoose.model("ChatMessage", new mongoose.Schema({
-  orderCode: { type: String, required: true, index: true },
-  sender: { type: String, enum: ["customer", "admin"], required: true },
-  message: { type: String, required: true, maxlength: 2000 },
-  read: { type: Boolean, default: false }
-}, { timestamps: true }));
-
-/* =========================
-   AUTHENTICATION
-========================= */
-
-const isProduction = process.env.NODE_ENV === "production";
-const INSECURE_DEFAULT_SECRET = "change-this-secret-before-production";
-
-if (isProduction && (!process.env.JWT_SECRET || process.env.JWT_SECRET === INSECURE_DEFAULT_SECRET || process.env.JWT_SECRET.trim().length < 16)) {
-  console.error("FATAL: In production, JWT_SECRET must be set to a secure string with at least 16 characters.");
-  process.exit(1);
-}
-
-const secret = () => {
-  if (isProduction && (!process.env.JWT_SECRET || process.env.JWT_SECRET === INSECURE_DEFAULT_SECRET)) {
-    throw new Error("JWT_SECRET must be configured in production");
-  }
-  return process.env.JWT_SECRET || INSECURE_DEFAULT_SECRET;
-};
-
-function adminOnly(req, res, next) {
-  const token = (req.headers.authorization || "").replace(/^Bearer /, "");
-
+// Админ сонгосон хэрэглэгчийн чатыг харах
+app.get("/api/admin/chats/:userId/messages", requireAdmin, async (req, res) => {
   try {
-    const data = jwt.verify(token, secret());
+    const { userId } = req.params;
 
-    if (data.role !== "admin") throw new Error();
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: "Хэрэглэгчийн ID буруу байна." });
+    }
 
-    req.admin = data;
-    next();
-  } catch {
-    return res.status(401).json({ error: "Админ эрх шаардлагатай" });
+    const messages = await ChatMessage.find({
+      userId
+    }).sort({ createdAt: 1 }).limit(200).lean();
+
+    await ChatMessage.updateMany(
+      { userId, sender: "user", read: false },
+      { $set: { read: true } }
+    );
+
+    res.json({ messages });
+  } catch (error) {
+    res.status(500).json({ error: "Мессежүүдийг ачаалж чадсангүй." });
   }
-}
+});
 
-function userOnly(req, res, next) {
-  const token = (req.headers.authorization || "").replace(/^Bearer /, "");
-
+// Админ хэрэглэгчид хариу илгээх
+app.post("/api/admin/chats/:userId/messages", requireAdmin, async (req, res) => {
   try {
-    const data = jwt.verify(token, secret());
-    if (data.role !== "user" || !data.userId) throw new Error();
-    req.userId = data.userId;
-    next();
-  } catch {
-    return res.status(401).json({ error: "Нэвтрэх шаардлагатай" });
-  }
-}
+    const { userId } = req.params;
+    const message = String(req.body?.message || "").trim();
 
-function normalizePhone(value) {
-  return String(value || "").replace(/\D/g, "");
-}
-
-function makeOrderCode() {
-  return "VX" + crypto.randomBytes(4).toString("hex").toUpperCase();
-}
-
-function cloudinaryReady() {
-  return process.env.CLOUDINARY_CLOUD_NAME &&
-    process.env.CLOUDINARY_API_KEY &&
-    process.env.CLOUDINARY_API_SECRET;
-}
-
-if (cloudinaryReady()) {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
-  });
-}
-
-/* =========================
-   RATE LIMITERS
-========================= */
-
-// Rate limiter for Admin Login (prevents brute-force attacks)
-const adminLoginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    error: "Хэт олон удаа буруу хандсан байна. 15 минутын дараа дахин оролдоно уу."
-  }
-});
-
-// Rate limiter for Order Placement (prevents spam and stock depletion attacks)
-const orderLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 15,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    error: "Захиалгын хязгаар хэтэрсэн байна. Түр хүлээгээд дахин оролдоно уу."
-  }
-});
-
-/* =========================
-   HEALTH
-========================= */
-
-app.get("/health", (req, res) => {
-  const isDbConnected = mongoose.connection.readyState === 1;
-
-  if (!isDbConnected) {
-    return res.status(503).json({
-      ok: false,
-      db: false,
-      error: "Database disconnected"
-    });
-  }
-
-  res.status(200).json({
-    ok: true,
-    db: true,
-    uptime: Math.round(process.uptime())
-  });
-});
-
-/* =========================
-   PRODUCTS
-========================= */
-
-// Барааны жагсаалт + нийцлийн шүүлтүүр
-app.get("/api/products", async (req, res) => {
-  try {
-    const filter = { active: true };
-
-    if (req.query.wheelSize) {
-      filter["compatibility.wheelSizes"] = String(req.query.wheelSize);
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ error: "Хэрэглэгчийн ID буруу байна." });
     }
 
-    if (req.query.brakeType) {
-      filter["compatibility.brakeTypes"] = String(req.query.brakeType);
-    }
-
-    if (req.query.speed) {
-      filter["compatibility.speeds"] = Number(req.query.speed);
-    }
-
-    if (req.query.bikeType) {
-      filter["compatibility.bikeTypes"] = String(req.query.bikeType);
-    }
-
-    const products = await Product.find(filter)
-      .sort({ featured: -1, createdAt: -1 })
-      .lean();
-
-    res.json(products);
-  } catch (e) {
-    res.status(500).json({ error: "Бараа ачаалж чадсангүй" });
-  }
-});
-
-/* =========================
-   CUSTOMER AUTHENTICATION
-========================= */
-
-const customerAuthLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: "Хэт олон удаа оролдлоо. 15 минутын дараа дахин оролдоно уу." }
-});
-
-app.post("/api/auth/register", customerAuthLimiter, async (req, res) => {
-  try {
-    const name = String(req.body.name || "").trim();
-    const email = String(req.body.email || "").trim().toLowerCase();
-    const phone = normalizePhone(req.body.phone);
-    const password = String(req.body.password || "");
-
-    if (!name || name.length > 80) {
-      return res.status(400).json({ error: "Нэрээ зөв оруулна уу" });
-    }
-
-    if (!email && !phone) {
-      return res.status(400).json({ error: "Утас эсвэл имэйл оруулна уу" });
-    }
-
-    if (email && !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
-      return res.status(400).json({ error: "Имэйл хаягаа шалгана уу" });
-    }
-
-    if (phone && (phone.length < 8 || phone.length > 15)) {
-      return res.status(400).json({ error: "Утасны дугаараа шалгана уу" });
-    }
-
-    if (password.length < 8) {
-      return res.status(400).json({ error: "Нууц үг дор хаяж 8 тэмдэгт байна" });
-    }
-
-    const conditions = [];
-    if (email) conditions.push({ email });
-    if (phone) conditions.push({ phone });
-
-    const existing = await User.findOne({ $or: conditions });
-
-    if (existing) {
-      return res.status(409).json({
-        error: "Энэ утас эсвэл имэйлээр бүртгэл үүссэн байна"
+    if (!message || message.length > 1000) {
+      return res.status(400).json({
+        error: "Мессеж 1-1000 тэмдэгт байх ёстой."
       });
+    }
+
+    const saved = await ChatMessage.create({
+      userId,
+      sender: "admin",
+      message
+    });
+
+    res.status(201).json({ message: saved });
+  } catch (error) {
+    res.status(500).json({ error: "Хариу илгээж чадсангүй." });
+  }
+});
+
+// ===== LIVE CHAT API END =====
+
+app.get("/api/health", (req, res) => {
+  res.json({
+    ok: true,
+    database: mongoose.connection.readyState === 1 ? "connected" : "disconnected"
+  });
+});
+
+
+// ===== ХЭРЭГЛЭГЧИЙН БҮРТГЭЛ, НЭВТРЭЛТ =====
+app.post("/api/auth/register", loginLimiter, async (req, res) => {
+  try {
+    const name = String(req.body?.name || "").trim();
+    const phone = String(req.body?.phone || "").replace(/\\D/g, "");
+    const password = req.body?.password;
+
+    if (name.length < 2 || name.length > 100) {
+      return res.status(400).json({ error: "Нэрээ зөв оруулна уу." });
+    }
+    if (phone.length < 8 || phone.length > 15) {
+      return res.status(400).json({ error: "Утасны дугаараа зөв оруулна уу." });
+    }
+    if (typeof password !== "string" || password.length < 8 || Buffer.byteLength(password, "utf8") > 72) {
+      return res.status(400).json({ error: "Нууц үг 8-72 байт байх ёстой." });
+    }
+
+    if (await User.findOne({ phone })) {
+      return res.status(409).json({ error: "Энэ утасны дугаар бүртгэлтэй байна." });
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-
-    const user = await User.create({
-      name,
-      ...(email ? { email } : {}),
-      ...(phone ? { phone } : {}),
-      passwordHash
-    });
+    const user = await User.create({ name, phone, passwordHash });
 
     const token = jwt.sign(
       { role: "user", userId: String(user._id) },
-      secret(),
+      JWT_SECRET,
       { expiresIn: "7d" }
     );
+
+    res.cookie("veltrix_user", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: "/"
+    });
 
     res.status(201).json({
       ok: true,
-      token,
-      user: {
-        id: String(user._id),
-        name: user.name,
-        email: user.email || "",
-        phone: user.phone || ""
-      }
+      user: { name: user.name, phone: user.phone }
     });
-  } catch (e) {
-    if (e.code === 11000) {
-      return res.status(409).json({ error: "Энэ мэдээллээр бүртгэл үүссэн байна" });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ error: "Энэ утасны дугаар бүртгэлтэй байна." });
     }
-    console.error("Customer registration error:", e.message);
-    res.status(500).json({ error: "Бүртгэл үүсгэхэд алдаа гарлаа" });
+    console.error("Register error:", error);
+    res.status(500).json({ error: "Бүртгэл үүсгэхэд алдаа гарлаа." });
   }
 });
 
-app.post("/api/auth/login", customerAuthLimiter, async (req, res) => {
+app.post("/api/auth/login", loginLimiter, async (req, res) => {
   try {
-    const identity = String(req.body.identity || "").trim();
-    const password = String(req.body.password || "");
+    const phone = String(req.body?.phone || "").replace(/\\D/g, "");
+    const password = req.body?.password;
 
-    if (!identity || !password) {
-      return res.status(400).json({ error: "Нэвтрэх мэдээллээ бөглөнө үү" });
+    if (phone.length < 8 || phone.length > 15 || typeof password !== "string") {
+      return res.status(400).json({ error: "Утас болон нууц үгээ зөв оруулна уу." });
     }
 
-    const user = identity.includes("@")
-      ? await User.findOne({ email: identity.toLowerCase() })
-      : await User.findOne({ phone: normalizePhone(identity) });
-
+    const user = await User.findOne({ phone }).select("+passwordHash");
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
-      return res.status(401).json({ error: "Нэвтрэх мэдээлэл буруу байна" });
+      return res.status(401).json({ error: "Утасны дугаар эсвэл нууц үг буруу байна." });
     }
 
     const token = jwt.sign(
       { role: "user", userId: String(user._id) },
-      secret(),
+      JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    res.json({
-      ok: true,
-      token,
-      user: {
-        id: String(user._id),
-        name: user.name,
-        email: user.email || "",
-        phone: user.phone || ""
-      }
+    res.cookie("veltrix_user", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: "/"
     });
-  } catch (e) {
-    console.error("Customer login error:", e.message);
-    res.status(500).json({ error: "Нэвтрэхэд алдаа гарлаа" });
+
+    res.json({ ok: true, user: { name: user.name, phone: user.phone } });
+  } catch (error) {
+    console.error("User login error:", error);
+    res.status(500).json({ error: "Нэвтрэхэд алдаа гарлаа." });
   }
 });
 
-app.get("/api/auth/me", userOnly, async (req, res) => {
+app.post("/api/auth/logout", (req, res) => {
+  res.clearCookie("veltrix_user", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    path: "/"
+  });
+  res.json({ ok: true });
+});
+
+app.get("/api/auth/me", requireUser, async (req, res) => {
   try {
-    const user = await User.findById(req.userId).select("name email phone");
-
-    if (!user) {
-      return res.status(404).json({ error: "Хэрэглэгч олдсонгүй" });
-    }
-
-    res.json({
-      id: String(user._id),
-      name: user.name,
-      email: user.email || "",
-      phone: user.phone || ""
-    });
+    const user = await User.findById(req.userId).select("name phone profileImage").lean();
+    if (!user) return res.status(401).json({ error: "Хэрэглэгч олдсонгүй." });
+    res.set("Cache-Control", "no-store");
+    res.json({ authenticated: true, user });
   } catch {
-    res.status(500).json({ error: "Хэрэглэгчийн мэдээлэл ачаалж чадсангүй" });
+    res.status(500).json({ error: "Хэрэглэгчийн мэдээлэл авахад алдаа гарлаа." });
   }
 });
 
-
-/* =========================
-   CUSTOMER PROFILE SETTINGS
-========================= */
-
-app.patch("/api/auth/profile", userOnly, async (req, res) => {
+app.get("/api/account/orders", requireUser, async (req, res) => {
   try {
-    const name = String(req.body.name || "").trim();
-    const email = String(req.body.email || "").trim().toLowerCase();
-    const phone = normalizePhone(req.body.phone);
+    const orders = await Order.find({ userId: req.userId })
+      .select("orderNumber customerName phone items total status statusHistory deliveryType createdAt updatedAt")
+      .sort({ createdAt: -1 })
+      .lean();
 
-    if (!name || name.length > 80) {
-      return res.status(400).json({ error: "Нэрээ зөв оруулна уу" });
+    res.set("Cache-Control", "no-store");
+    res.json({ ok: true, orders });
+  } catch (error) {
+    console.error("Account orders error:", error);
+    res.status(500).json({ error: "Захиалгууд авахад алдаа гарлаа." });
+  }
+});
+
+app.patch("/api/account/profile", requireUser, async (req, res) => {
+  try {
+    const name = String(req.body?.name || "").trim();
+    const phone = String(req.body?.phone || "").replace(/[^0-9]/g, "");
+
+    if (name.length < 2 || name.length > 100) {
+      return res.status(400).json({ error: "Нэрээ зөв оруулна уу." });
     }
 
-    if (!email && !phone) {
-      return res.status(400).json({ error: "Утас эсвэл имэйлийн аль нэгийг үлдээнэ үү" });
+    if (phone.length < 8 || phone.length > 15) {
+      return res.status(400).json({ error: "Утасны дугаараа зөв оруулна уу." });
     }
 
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({ error: "Имэйл хаягаа шалгана уу" });
-    }
-
-    if (phone && (phone.length < 8 || phone.length > 15)) {
-      return res.status(400).json({ error: "Утасны дугаараа шалгана уу" });
-    }
-
-    const duplicateConditions = [];
-    if (email) duplicateConditions.push({ email });
-    if (phone) duplicateConditions.push({ phone });
-
-    if (duplicateConditions.length) {
-      const duplicate = await User.findOne({
-        _id: { $ne: req.userId },
-        $or: duplicateConditions
-      });
-
-      if (duplicate) {
-        return res.status(409).json({
-          error: "Энэ утас эсвэл имэйл өөр хэрэглэгчид бүртгэлтэй байна"
-        });
-      }
-    }
-
-    const update = { name };
-    const unset = {};
-
-    if (email) update.email = email;
-    else unset.email = 1;
-
-    if (phone) update.phone = phone;
-    else unset.phone = 1;
-
-    const changes = { $set: update };
-    if (Object.keys(unset).length) changes.$unset = unset;
-
-    const user = await User.findByIdAndUpdate(req.userId, changes, {
-      new: true,
-      runValidators: true
-    }).select("name email phone");
-
-    if (!user) {
-      return res.status(404).json({ error: "Хэрэглэгч олдсонгүй" });
-    }
-
-    res.json({
-      ok: true,
-      user: {
-        id: String(user._id),
-        name: user.name,
-        email: user.email || "",
-        phone: user.phone || ""
-      }
+    const existingUser = await User.findOne({
+      phone,
+      _id: { $ne: req.userId }
     });
-  } catch (e) {
-    if (e.code === 11000) {
-      return res.status(409).json({ error: "Энэ мэдээлэл өөр хэрэглэгчид бүртгэлтэй байна" });
+
+    if (existingUser) {
+      return res.status(409).json({ error: "Энэ утасны дугаар өөр хэрэглэгчид бүртгэлтэй байна." });
     }
-    console.error("Profile update error:", e.message);
-    res.status(500).json({ error: "Профайл шинэчлэхэд алдаа гарлаа" });
+
+    const user = await User.findByIdAndUpdate(
+      req.userId,
+      { $set: { name, phone } },
+      { new: true, runValidators: true }
+    ).select("name phone");
+
+    if (!user) {
+      return res.status(404).json({ error: "Хэрэглэгч олдсонгүй." });
+    }
+
+    await Order.updateMany(
+      { userId: req.userId },
+      { $set: { phone } }
+    );
+
+    res.set("Cache-Control", "no-store");
+    res.json({ ok: true, user, message: "Мэдээлэл амжилттай шинэчлэгдлээ." });
+  } catch (error) {
+    console.error("Update profile error:", error);
+    res.status(500).json({ error: "Мэдээлэл шинэчлэхэд алдаа гарлаа." });
   }
 });
 
-app.post("/api/auth/change-password", userOnly, customerAuthLimiter, async (req, res) => {
+app.patch("/api/account/photo", requireUser, async (req, res) => {
   try {
-    const currentPassword = String(req.body.currentPassword || "");
-    const newPassword = String(req.body.newPassword || "");
+    const profileImage = String(req.body?.profileImage || "");
 
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: "Бүх талбарыг бөглөнө үү" });
+    if (!profileImage) {
+      return res.status(400).json({ error: "Зураг сонгоно уу." });
     }
 
-    if (newPassword.length < 8) {
-      return res.status(400).json({ error: "Шинэ нууц үг дор хаяж 8 тэмдэгт байна" });
+    const match = profileImage.match(
+      /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/
+    );
+
+    if (!match) {
+      return res.status(400).json({ error: "JPEG, PNG эсвэл WEBP зураг сонгоно уу." });
     }
 
-    if (newPassword.length > 128) {
-      return res.status(400).json({ error: "Нууц үг хэт урт байна" });
+    const imageBuffer = Buffer.from(match[2], "base64");
+
+    if (imageBuffer.length > 700 * 1024) {
+      return res.status(400).json({ error: "Зургийн хэмжээ 700KB-аас бага байх ёстой." });
     }
 
-    const user = await User.findById(req.userId);
+    const signatures = {
+      jpeg: imageBuffer[0] === 0xFF && imageBuffer[1] === 0xD8,
+      png: imageBuffer.subarray(0, 8).equals(
+        Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+      ),
+      webp: imageBuffer.toString("ascii", 0, 4) === "RIFF" &&
+            imageBuffer.toString("ascii", 8, 12) === "WEBP"
+    };
+
+    if (!signatures[match[1]]) {
+      return res.status(400).json({ error: "Зургийн файл буруу байна." });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.userId,
+      { $set: { profileImage } },
+      { new: true, runValidators: true }
+    ).select("name phone profileImage");
+
     if (!user) {
-      return res.status(404).json({ error: "Хэрэглэгч олдсонгүй" });
+      return res.status(404).json({ error: "Хэрэглэгч олдсонгүй." });
+    }
+
+    res.set("Cache-Control", "no-store");
+    res.json({ ok: true, user, message: "Профайл зураг шинэчлэгдлээ." });
+  } catch (error) {
+    console.error("Update profile photo error:", error);
+    res.status(500).json({ error: "Профайл зураг шинэчлэхэд алдаа гарлаа." });
+  }
+});
+
+app.patch("/api/account/password", requireUser, async (req, res) => {
+  try {
+    const currentPassword = req.body?.currentPassword;
+    const newPassword = req.body?.newPassword;
+
+    if (typeof currentPassword !== "string" || typeof newPassword !== "string") {
+      return res.status(400).json({ error: "Нууц үгийн мэдээллээ оруулна уу." });
+    }
+
+    if (newPassword.length < 8 || Buffer.byteLength(newPassword, "utf8") > 72) {
+      return res.status(400).json({ error: "Шинэ нууц үг 8-72 байт байх ёстой." });
+    }
+
+    const user = await User.findById(req.userId).select("+passwordHash");
+    if (!user) {
+      return res.status(404).json({ error: "Хэрэглэгч олдсонгүй." });
     }
 
     const valid = await bcrypt.compare(currentPassword, user.passwordHash);
     if (!valid) {
-      return res.status(401).json({ error: "Хуучин нууц үг буруу байна" });
+      return res.status(401).json({ error: "Одоогийн нууц үг буруу байна." });
     }
 
     user.passwordHash = await bcrypt.hash(newPassword, 12);
     await user.save();
 
-    res.json({ ok: true, message: "Нууц үг амжилттай солигдлоо" });
-  } catch (e) {
-    console.error("Password change error:", e.message);
-    res.status(500).json({ error: "Нууц үг солиход алдаа гарлаа" });
+    res.json({ ok: true, message: "Нууц үг амжилттай солигдлоо." });
+  } catch (error) {
+    console.error("Change password error:", error);
+    res.status(500).json({ error: "Нууц үг солиход алдаа гарлаа." });
   }
 });
 
-/* =========================
-   ORDERS
-========================= */
-
-app.post("/api/orders", userOnly, orderLimiter, async (req, res) => {
-  let reservedPoints = 0;
-  let reservedPhone = "";
-
+app.post("/api/admin/login", loginLimiter, async (req, res) => {
   try {
-    const {
-      customer,
+    const password = req.body?.password;
+
+    if (typeof password !== "string" || password.length === 0) {
+      return res.status(400).json({ error: "Нууц үгээ оруулна уу." });
+    }
+
+    const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
+    const valid = await bcrypt.compare(password, passwordHash);
+
+    if (!valid) {
+      return res.status(401).json({ error: "Нууц үг буруу байна." });
+    }
+
+    const token = jwt.sign(
+      { role: "admin" },
+      JWT_SECRET,
+      { expiresIn: "8h" }
+    );
+
+    res.cookie("veltrix_admin", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 8 * 60 * 60 * 1000,
+      path: "/"
+    });
+
+    res.json({ ok: true, message: "Амжилттай нэвтэрлээ." });
+  } catch (error) {
+    console.error("Login error:", error.message);
+    res.status(500).json({ error: "Серверийн алдаа." });
+  }
+});
+
+app.post("/api/admin/logout", (req, res) => {
+  res.clearCookie("veltrix_admin", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    path: "/"
+  });
+  res.json({ ok: true });
+});
+
+app.get("/api/admin/me", requireAdmin, (req, res) => {
+  res.json({ authenticated: true, role: "admin" });
+});
+
+// Бараанууд
+app.get("/api/products", async (req, res) => {
+  try {
+    const products = await Product.find()
+      .select("name category price stock image description")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    res.set("Cache-Control", "no-store");
+    res.json(products);
+  } catch (error) {
+    console.error("Public products error:", error);
+    res.status(500).json({ error: "Бараануудыг авахад алдаа гарлаа." });
+  }
+});
+
+
+// Хэрэглэгч захиалга үүсгэх
+app.post("/api/orders", requireUser, async (req, res) => {
+  try {
+    const data = req.body || {};
+    const customerName = String(data.customerName || "").trim();
+    const phone = String(data.phone || "").trim();
+    const deliveryType = data.deliveryType;
+    const address = String(data.address || "").trim();
+    const paymentMethod = data.paymentMethod;
+    const note = String(data.note || "").trim();
+    const requestedItems = data.items;
+
+    if (customerName.length < 2 || customerName.length > 100) {
+      return res.status(400).json({ error: "Нэрээ зөв оруулна уу." });
+    }
+    if (!/^[0-9+()\-\s]{8,20}$/.test(phone)) {
+      return res.status(400).json({ error: "Утасны дугаараа зөв оруулна уу." });
+    }
+    if (!["delivery", "pickup"].includes(deliveryType)) {
+      return res.status(400).json({ error: "Авах төрлөө сонгоно уу." });
+    }
+    if (deliveryType === "delivery" && address.length < 5) {
+      return res.status(400).json({ error: "Хүргэлтийн хаягаа оруулна уу." });
+    }
+    if (!["cash", "transfer"].includes(paymentMethod)) {
+      return res.status(400).json({ error: "Төлбөрийн хэлбэрээ сонгоно уу." });
+    }
+    if (note.length > 500) {
+      return res.status(400).json({ error: "Нэмэлт тэмдэглэл хэт урт байна." });
+    }
+    if (!Array.isArray(requestedItems) || requestedItems.length < 1 || requestedItems.length > 30) {
+      return res.status(400).json({ error: "Сагс хоосон эсвэл барааны тоо хэтэрсэн байна." });
+    }
+
+    const quantities = new Map();
+    for (const item of requestedItems) {
+      const id = String(item.productId || "");
+      const quantity = Number(item.quantity);
+      if (!mongoose.isValidObjectId(id) || !Number.isInteger(quantity) || quantity < 1 || quantity > 99) {
+        return res.status(400).json({ error: "Барааны мэдээлэл буруу байна." });
+      }
+      quantities.set(id, (quantities.get(id) || 0) + quantity);
+    }
+
+    const products = await Product.find({
+      _id: { $in: [...quantities.keys()] }
+    }).lean();
+
+    if (products.length !== quantities.size) {
+      return res.status(400).json({ error: "Зарим бараа олдсонгүй. Сагсаа шинэчилнэ үү." });
+    }
+
+    const orderItems = [];
+    let total = 0;
+
+    for (const product of products) {
+      const quantity = quantities.get(String(product._id));
+      if (product.stock < quantity) {
+        return res.status(400).json({ error: `${product.name}: үлдэгдэл хүрэлцэхгүй байна.` });
+      }
+      orderItems.push({
+        productId: String(product._id),
+        name: product.name,
+        price: product.price,
+        cost: Number(product.cost || 0),
+        quantity
+      });
+      total += product.price * quantity;
+    }
+
+    const order = await Order.create({
+      userId: req.userId,
+      orderNumber: "VX-" + Date.now().toString(36).toUpperCase(),
+      customerName,
       phone,
-      address,
-      note,
-      items,
+      deliveryType,
+      address: deliveryType === "delivery" ? address : "",
       paymentMethod,
-      coupon
-    } = req.body;
-
-    if (
-      !customer ||
-      !phone ||
-      !address ||
-      !Array.isArray(items) ||
-      !items.length
-    ) {
-      return res.status(400).json({
-        error: "Мэдээллээ бүрэн бөглөнө үү"
-      });
-    }
-
-    const cleanPhone = normalizePhone(phone);
-
-    if (cleanPhone.length < 8) {
-      return res.status(400).json({
-        error: "Утасны дугаараа шалгана уу"
-      });
-    }
-
-    // Ижил барааны захиалгын мөрүүдийг эхлээд нэгтгэнэ
-    const groupedItems = new Map();
-
-    for (const item of items) {
-      const productId = String(item?.productId || "").trim();
-      const quantity = Number(item?.quantity);
-
-      if (
-        !/^[a-f0-9]{24}$/i.test(productId) ||
-        !Number.isSafeInteger(quantity) ||
-        quantity < 1
-      ) {
-        return res.status(400).json({
-          error: "Барааны мэдээлэл эсвэл тоо ширхэг буруу байна"
-        });
-      }
-
-      const previous = groupedItems.get(productId);
-      const combinedQuantity = (previous?.quantity || 0) + quantity;
-
-      if (!Number.isSafeInteger(combinedQuantity)) {
-        return res.status(400).json({
-          error: "Барааны тоо ширхэг хэт их байна"
-        });
-      }
-
-      groupedItems.set(productId, {
-        productId,
-        quantity: combinedQuantity
-      });
-    }
-
-    const clean = [];
-    let subtotal = 0;
-
-    for (const item of groupedItems.values()) {
-      const p = await Product.findOne({
-        _id: item.productId,
-        active: true
-      });
-
-      if (!p || p.stock < item.quantity) {
-        return res.status(400).json({
-          error: `${p?.name || "Бараа"} үлдэгдэл хүрэлцэхгүй байна`
-        });
-      }
-
-      const lineTotal = p.price * item.quantity;
-
-      if (!Number.isFinite(lineTotal)) {
-        return res.status(400).json({
-          error: "Захиалгын үнийн мэдээлэл буруу байна"
-        });
-      }
-
-      clean.push({
-        productId: String(p._id),
-        name: p.name,
-        price: p.price,
-        quantity: item.quantity
-      });
-
-      subtotal += lineTotal;
-
-      if (!Number.isFinite(subtotal)) {
-        return res.status(400).json({
-          error: "Захиалгын нийт үнэ хэт их байна"
-        });
-      }
-    }
-
-    let discount = 0;
-
-    if (coupon) {
-      const c = await Coupon.findOne({
-        code: String(coupon).toUpperCase(),
-        active: true
-      });
-
-      if (c && (!c.expiresAt || c.expiresAt > Date.now())) {
-        discount = Math.round(subtotal * c.percent / 100);
-      }
-    }
-
-    const deliveryFee = subtotal >= 150000 ? 0 : 8000;
-
-    const deducted = [];
-    let createdOrder = null;
-
-    try {
-      // Барааны үлдэгдлийг дахин шалгаж хасна
-      for (const item of clean) {
-        const result = await Product.updateOne(
-          { _id: item.productId, stock: { $gte: item.quantity } },
-          { $inc: { stock: -item.quantity } }
-        );
-
-        if (!result.modifiedCount) {
-          throw new Error("STOCK_CHANGED");
-        }
-        deducted.push(item);
-      }
-
-      const total = Math.max(0, subtotal - discount) + deliveryFee;
-
-      createdOrder = await Order.create({
-        code: makeOrderCode(),
-        userId: String(req.userId),
-        customer: String(customer).trim(),
-        phone: cleanPhone,
-        address: String(address).trim(),
-        note: String(note || "").slice(0, 1000),
-        items: clean,
-        subtotal,
-        discount,
-        total,
-        deliveryFee,
-        status: "Шинэ",
-        statusHistory: [{
-          status: "Шинэ",
-          changedAt: new Date(),
-          note: "Захиалга хүлээн авсан"
-        }],
-        paymentMethod: "Хүлээн авахдаа төлөх",
-        paymentStatus: "Төлөөгүй"
-      });
-
-      await recordOrderStockMovements(createdOrder, "Зарлага", "placed");
-
-      await createUserNotification({
-        userId: String(createdOrder.userId),
-        orderId: String(createdOrder._id),
-        orderCode: createdOrder.code,
-        type: "order_created",
-        title: "Шинэ захиалга бүртгэгдлээ",
-        message: `Таны ${createdOrder.code} захиалгыг хүлээн авлаа.`
-      });
-
-      res.status(201).json({
-        ok: true,
-        code: createdOrder.code,
-        total: createdOrder.total,
-        message: "Захиалга амжилттай бүртгэгдлээ"
-      });
-    } catch (orderErr) {
-      if (createdOrder) {
-        await StockMovement.deleteMany({ orderId: String(createdOrder._id) }).catch(() => {});
-        await Order.deleteOne({ _id: createdOrder._id }).catch(() => {});
-      }
-
-      // Захиалга үүсэх явцад алдаа гарвал хасагдсан бараануудыг буцаан сэргээнэ
-      for (const item of deducted) {
-        await Product.updateOne(
-          { _id: item.productId },
-          { $inc: { stock: item.quantity } }
-        ).catch(rollbackErr => {
-          console.error(`Rollback error for product ${item.productId}:`, rollbackErr.message);
-        });
-      }
-      throw orderErr;
-    }
-  } catch (e) {
-    console.error("Order error:", e.message);
-
-    if (e.message === "STOCK_CHANGED") {
-      return res.status(409).json({
-        error: "Барааны үлдэгдэл өөрчлөгдсөн тул захиалга үүсгэх боломжгүй боллоо. Та дахин оролдоно уу."
-      });
-    }
-
-    res.status(500).json({
-      error: "Захиалга үүсгэхэд алдаа гарлаа. Дахин шалгана уу."
-    });
-  }
-});
-
-/* =========================
-   CUSTOMER MY ORDERS
-========================= */
-
-app.get("/api/my/orders", userOnly, async (req, res) => {
-  try {
-    const orders = await Order.find({
-      userId: String(req.userId)
-    })
-      .select("code phone items total subtotal discount deliveryFee status paymentMethod paymentStatus createdAt updatedAt")
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .lean();
-
-    res.json(orders);
-  } catch (error) {
-    console.error("My orders error:", error.message);
-    res.status(500).json({ error: "Захиалгын түүх ачаалж чадсангүй" });
-  }
-});
-
-/* =========================
-   CUSTOMER NOTIFICATIONS
-========================= */
-
-app.get("/api/my/notifications", userOnly, async (req, res) => {
-  try {
-    const userId = String(req.userId);
-
-    const [notifications, unreadCount] = await Promise.all([
-      Notification.find({ userId })
-        .sort({ createdAt: -1 })
-        .limit(50)
-        .lean(),
-      Notification.countDocuments({ userId, read: false })
-    ]);
-
-    res.json({ notifications, unreadCount });
-  } catch (error) {
-    console.error("My notifications error:", error.message);
-    res.status(500).json({ error: "Мэдэгдэл ачаалж чадсангүй" });
-  }
-});
-
-app.patch("/api/my/notifications/:id/read", userOnly, async (req, res) => {
-  try {
-    const notification = await Notification.findOneAndUpdate(
-      {
-        _id: req.params.id,
-        userId: String(req.userId)
-      },
-      { $set: { read: true } },
-      { new: true }
-    ).lean();
-
-    if (!notification) {
-      return res.status(404).json({ error: "Мэдэгдэл олдсонгүй" });
-    }
-
-    res.json({ ok: true, notification });
-  } catch (error) {
-    console.error("Mark notification read error:", error.message);
-    res.status(500).json({ error: "Мэдэгдэл шинэчилж чадсангүй" });
-  }
-});
-
-app.get("/api/push/public-key", (req, res) => {
-  if (!pushReady) {
-    return res.status(503).json({ error: "Push тохиргоо бэлэн биш байна" });
-  }
-
-  res.json({ publicKey: vapidPublicKey });
-});
-
-app.post("/api/my/push-subscriptions", userOnly, async (req, res) => {
-  try {
-    const subscription = req.body || {};
-    const endpoint = String(subscription.endpoint || "");
-    const p256dh = String(subscription.keys?.p256dh || "");
-    const auth = String(subscription.keys?.auth || "");
-
-    if (
-      !endpoint.startsWith("https://") ||
-      endpoint.length > 3000 ||
-      !p256dh ||
-      !auth ||
-      p256dh.length > 300 ||
-      auth.length > 300
-    ) {
-      return res.status(400).json({ error: "Төхөөрөмжийн мэдээлэл буруу байна" });
-    }
-
-    await PushSubscription.findOneAndUpdate(
-      { endpoint },
-      {
-        $set: {
-          userId: String(req.userId),
-          endpoint,
-          keys: { p256dh, auth },
-          userAgent: String(req.headers["user-agent"] || "").slice(0, 300)
-        }
-      },
-      { upsert: true, new: true, runValidators: true }
-    );
-
-    res.status(201).json({ ok: true });
-  } catch (error) {
-    console.error("Push subscription save error:", error.message);
-    res.status(500).json({ error: "Төхөөрөмж бүртгэж чадсангүй" });
-  }
-});
-
-app.delete("/api/my/push-subscriptions", userOnly, async (req, res) => {
-  try {
-    const endpoint = String(req.body?.endpoint || "");
-    if (!endpoint) {
-      return res.status(400).json({ error: "Төхөөрөмжийн endpoint шаардлагатай" });
-    }
-
-    await PushSubscription.deleteOne({
-      userId: String(req.userId),
-      endpoint
-    });
-
-    res.json({ ok: true });
-  } catch (error) {
-    console.error("Push subscription delete error:", error.message);
-    res.status(500).json({ error: "Төхөөрөмж устгаж чадсангүй" });
-  }
-});
-
-
-/* =========================
-   ORDER TRACKING
-========================= */
-
-// Нэвтэрсэн хэрэглэгч өөрийн захиалгыг кодоор шалгах
-app.get("/api/my/orders/:code/track", userOnly, async (req, res) => {
-  try {
-    const code = String(req.params.code || "").trim().toUpperCase();
-
-    if (!code) {
-      return res.status(400).json({ error: "Захиалгын код оруулна уу" });
-    }
-
-    const order = await Order.findOne({
-      code,
-      userId: String(req.userId)
-    }).lean();
-
-    if (!order) {
-      return res.status(404).json({ error: "Захиалга олдсонгүй" });
-    }
-
-    const statusHistory =
-      Array.isArray(order.statusHistory) && order.statusHistory.length
-        ? order.statusHistory
-        : [{
-            status: order.status || "Шинэ",
-            changedAt: order.updatedAt || order.createdAt,
-            note: "Одоогийн төлөв"
-          }];
-
-    res.json({
-      code: order.code,
-      status: order.status,
-      statusHistory,
-      items: order.items,
-      total: order.total,
-      createdAt: order.createdAt,
-      updatedAt: order.updatedAt
-    });
-  } catch (error) {
-    console.error("My order tracking error:", error.message);
-    res.status(500).json({ error: "Захиалга шалгахад алдаа гарлаа" });
-  }
-});
-
-// Захиалгын код + утсаар шалгана
-app.get("/api/orders/track", async (req, res) => {
-  try {
-    const code = String(req.query.code || "").trim().toUpperCase();
-    const phone = normalizePhone(req.query.phone);
-
-    if (!code || !phone) {
-      return res.status(400).json({
-        error: "Захиалгын код болон утасны дугаараа оруулна уу"
-      });
-    }
-
-    const order = await Order.findOne({
-      code,
-      phone
-    }).lean();
-
-    if (!order) {
-      return res.status(404).json({
-        error: "Захиалга олдсонгүй. Мэдээллээ шалгана уу."
-      });
-    }
-
-    const statusHistory =
-      Array.isArray(order.statusHistory) && order.statusHistory.length
-        ? order.statusHistory
-        : [{
-            status: order.status || "Шинэ",
-            changedAt: order.updatedAt || order.createdAt,
-            note: "Одоогийн төлөв"
-          }];
-
-    res.json({
-      code: order.code,
-      status: order.status,
-      statusHistory,
-      items: order.items,
-      total: order.total,
-      createdAt: order.createdAt,
-      updatedAt: order.updatedAt
-    });
-  } catch {
-    res.status(500).json({ error: "Захиалга шалгахад алдаа гарлаа" });
-  }
-});
-
-/* =========================
-   LOYALTY POINTS
-========================= */
-
-// Онооны үлдэгдэл шалгах
-app.get("/api/loyalty", async (req, res) => {
-  try {
-    const phone = normalizePhone(req.query.phone);
-
-    if (phone.length < 8) {
-      return res.status(400).json({ error: "Утасны дугаараа шалгана уу" });
-    }
-
-    const account = await Loyalty.findOne({ phone }).lean();
-
-    res.json({
-      points: account?.points || 0,
-      totalEarned: account?.totalEarned || 0,
-      rule: "Хүргэгдсэн захиалгын үнийн дүнгийн 1%-ийг оноо болгон авна."
-    });
-  } catch {
-    res.status(500).json({ error: "Оноо шалгахад алдаа гарлаа" });
-  }
-});
-
-/* =========================
-   PRODUCT REVIEWS
-========================= */
-
-// Зөвшөөрөгдсөн үнэлгээнүүд
-app.get("/api/products/:id/reviews", async (req, res) => {
-  try {
-    const reviews = await Review.find({
-      productId: req.params.id,
-      approved: true
-    })
-      .select("customer rating comment createdAt")
-      .sort({ createdAt: -1 })
-      .lean();
-
-    const average = reviews.length
-      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
-      : 0;
-
-    res.json({
-      reviews,
-      count: reviews.length,
-      average: Number(average.toFixed(1))
-    });
-  } catch {
-    res.status(500).json({ error: "Үнэлгээ ачаалж чадсангүй" });
-  }
-});
-
-// Зөвхөн хүргэгдсэн захиалгын бараанд үнэлгээ өгнө
-app.post("/api/reviews", async (req, res) => {
-  try {
-    const {
-      orderCode,
-      phone,
-      productId,
-      rating,
-      comment
-    } = req.body;
-
-    const cleanCode = String(orderCode || "").trim().toUpperCase();
-    const cleanPhone = normalizePhone(phone);
-    const stars = Number(rating);
-
-    if (
-      !cleanCode ||
-      cleanPhone.length < 8 ||
-      !productId ||
-      !Number.isInteger(stars) ||
-      stars < 1 ||
-      stars > 5
-    ) {
-      return res.status(400).json({
-        error: "Мэдээллээ зөв бөглөнө үү"
-      });
-    }
-
-    const order = await Order.findOne({
-      code: cleanCode,
-      phone: cleanPhone,
-      status: "Хүргэгдсэн"
-    });
-
-    if (!order) {
-      return res.status(403).json({
-        error: "Зөвхөн хүргэгдсэн захиалгад үнэлгээ өгөх боломжтой"
-      });
-    }
-
-    const purchased = order.items.some(
-      item => item.productId === String(productId)
-    );
-
-    if (!purchased) {
-      return res.status(403).json({
-        error: "Энэ бараа тухайн захиалгад байхгүй байна"
-      });
-    }
-
-    const review = await Review.create({
-      productId: String(productId),
-      orderCode: cleanCode,
-      customer: order.customer,
-      phone: cleanPhone,
-      rating: stars,
-      comment: String(comment || "").slice(0, 1000)
+      note,
+      items: orderItems,
+      total,
+      statusHistory: [{ status: "Шинэ" }]
     });
 
     res.status(201).json({
       ok: true,
-      message: "Үнэлгээ админы шалгалтад илгээгдлээ",
-      reviewId: review._id
+      orderNumber: order.orderNumber,
+      total: order.total,
+      message: "Захиалга амжилттай бүртгэгдлээ."
     });
-  } catch (e) {
-    if (e.code === 11000) {
-      return res.status(409).json({
-        error: "Та энэ захиалгын бараанд аль хэдийн үнэлгээ өгсөн байна"
-      });
-    }
-
-    res.status(500).json({ error: "Үнэлгээ илгээж чадсангүй" });
+  } catch (error) {
+    console.error("Create order error:", error);
+    res.status(500).json({ error: "Захиалга бүртгэхэд алдаа гарлаа." });
   }
 });
 
-/* =========================
-   CUSTOMER CHAT
-========================= */
 
-// Хэрэглэгч захиалгын чатаа харах
-app.get("/api/orders/chat", userOnly, async (req, res) => {
+
+// Хэрэглэгч захиалгаа дугаар болон утсаар хянах
+app.post("/api/orders/track", requireUser, async (req, res) => {
   try {
-    const code = String(req.query.code || "").trim().toUpperCase();
-    const order = await Order.findOne({
-      code,
-      userId: String(req.userId)
-    }).select("_id");
+    const orderNumber = String(req.body?.orderNumber || "").trim().toUpperCase();
+    const phone = String(req.body?.phone || "").replace(/\D/g, "");
 
-    if (!order) {
-      return res.status(404).json({ error: "Захиалга олдсонгүй" });
+    if (!/^VX-[A-Z0-9]+$/.test(orderNumber) || phone.length < 8 || phone.length > 15) {
+      return res.status(400).json({ error: "Захиалгын дугаар болон утсаа зөв оруулна уу." });
     }
 
-    const messages = await ChatMessage.find({ orderCode: code })
-      .sort({ createdAt: 1 })
+    const order = await Order.findOne({ orderNumber })
+      .select("orderNumber phone status createdAt items.name items.quantity total deliveryType")
       .lean();
 
-    res.json(messages);
-  } catch {
-    res.status(500).json({ error: "Чат ачаалж чадсангүй" });
-  }
-});
-
-// Хэрэглэгч чат бичих
-app.post("/api/orders/chat", userOnly, async (req, res) => {
-  try {
-    const code = String(req.body.code || "").trim().toUpperCase();
-    const message = String(req.body.message || "").trim();
-
-    if (!message || message.length > 2000) {
-      return res.status(400).json({
-        error: "Мессеж 1-2000 тэмдэгт байх ёстой"
+    if (!order || String(order.phone).replace(/\D/g, "") !== phone) {
+      return res.status(404).json({
+        error: "Захиалга олдсонгүй. Мэдээллээ шалгаад дахин оролдоно уу."
       });
     }
 
-    const order = await Order.findOne({
-      code,
-      userId: String(req.userId)
-    });
-
-    if (!order) {
-      return res.status(404).json({ error: "Захиалга олдсонгүй" });
-    }
-
-    const saved = await ChatMessage.create({
-      orderCode: code,
-      sender: "customer",
-      message
-    });
-
-    res.status(201).json(saved);
-  } catch {
-    res.status(500).json({ error: "Мессеж илгээж чадсангүй" });
-  }
-});
-
-/* =========================
-   ADMIN LOGIN
-========================= */
-
-app.post("/api/admin/login", adminLoginLimiter, async (req, res) => {
-  const password = String(req.body.password || "");
-
-  if (!process.env.ADMIN_PASSWORD) {
-    return res.status(503).json({
-      error: "Render дээр ADMIN_PASSWORD тохируулаагүй байна"
-    });
-  }
-
-  const ok =
-    await bcrypt.compare(password, process.env.ADMIN_PASSWORD).catch(() => false) ||
-    password === process.env.ADMIN_PASSWORD;
-
-  if (!ok) {
-    return res.status(401).json({ error: "Нууц үг буруу байна" });
-  }
-
-  res.json({
-    token: jwt.sign({ role: "admin" }, secret(), { expiresIn: "12h" })
-  });
-});
-
-/* =========================
-   ADMIN ANALYTICS
-========================= */
-
-app.get("/api/admin/overview", adminOnly, async (req, res) => {
-  try {
-    const [
-      products,
-      orders,
-      all,
-      lowStock,
-      pendingReviews,
-      unreadMessages
-    ] = await Promise.all([
-      Product.countDocuments({ active: true }),
-      Order.countDocuments(),
-      Order.find({ status: { $ne: "Цуцалсан" } })
-        .select("total createdAt status"),
-      Product.countDocuments({ active: true, stock: { $lte: 3 } }),
-      Review.countDocuments({ approved: false }),
-      ChatMessage.countDocuments({ sender: "customer", read: false })
-    ]);
-
-    const revenue = all.reduce((sum, order) => sum + (order.total || 0), 0);
-
-    const month = new Date();
-    month.setDate(1);
-    month.setHours(0, 0, 0, 0);
-
-    const monthly = all
-      .filter(order => order.createdAt >= month)
-      .reduce((sum, order) => sum + (order.total || 0), 0);
-
-    const delivered = all.filter(o => o.status === "Хүргэгдсэн").length;
-    const cancelled = await Order.countDocuments({ status: "Цуцалсан" });
-
+    res.set("Cache-Control", "no-store");
     res.json({
-      products,
-      orders,
-      revenue,
-      monthly,
-      lowStock,
-      delivered,
-      cancelled,
-      pendingReviews,
-      unreadMessages
+      ok: true,
+      order: {
+        orderNumber: order.orderNumber,
+        status: order.status,
+        createdAt: order.createdAt,
+        items: order.items.map(item => ({
+          name: item.name,
+          quantity: item.quantity
+        })),
+        total: order.total,
+        deliveryType: order.deliveryType
+      }
     });
-  } catch {
-    res.status(500).json({ error: "Статистик ачаалж чадсангүй" });
+  } catch (error) {
+    console.error("Track order error:", error);
+    res.status(500).json({ error: "Захиалга шалгахад алдаа гарлаа." });
   }
 });
 
-/* =========================
-   ADMIN PRODUCTS
-========================= */
-
-app.get("/api/admin/products", adminOnly, async (req, res) => {
-  res.json(await Product.find().sort({ createdAt: -1 }));
-});
-
-app.post("/api/admin/products", adminOnly, async (req, res) => {
+// Админ борлуулалтын статистик
+app.get("/api/admin/analytics", requireAdmin, async (req, res) => {
   try {
-    const p = await Product.create(req.body);
-    res.status(201).json(p);
-  } catch (e) {
-    res.status(400).json({
-      error: "Барааны мэдээллээ шалгана уу"
-    });
-  }
-});
+    const orders = await Order.find()
+      .select("status total items createdAt")
+      .lean();
 
-app.put("/api/admin/products/:id", adminOnly, async (req, res) => {
-  try {
-    const p = await Product.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
+    const completed = orders.filter(order => order.status === "Дууссан");
+    const cancelled = orders.filter(order => order.status === "Цуцалсан");
+    const active = orders.filter(order =>
+      !["Дууссан", "Цуцалсан"].includes(order.status)
     );
 
-    if (!p) {
-      return res.status(404).json({ error: "Бараа олдсонгүй" });
-    }
+    const totalRevenue = completed.reduce(
+      (sum, order) => sum + Number(order.total || 0), 0
+    );
 
-    res.json(p);
-  } catch {
-    res.status(400).json({ error: "Шинэчлэхэд алдаа гарлаа" });
-  }
-});
-
-app.delete("/api/admin/products/:id", adminOnly, async (req, res) => {
-  const p = await Product.findByIdAndUpdate(
-    req.params.id,
-    { active: false },
-    { new: true }
-  );
-
-  if (!p) {
-    return res.status(404).json({ error: "Бараа олдсонгүй" });
-  }
-
-  res.json({ ok: true });
-});
-
-// Барааг бүр мөсөн устгах
-app.delete("/api/admin/products/:id/permanent", adminOnly, async (req, res) => {
-  try {
-    const productId = String(req.params.id);
-
-    // Идэвхтэй захиалгад байгаа барааг устгахгүй
-    const activeOrder = await Order.exists({
-      "items.productId": productId,
-      $or: [
-        { status: { $nin: ["Хүргэгдсэн", "Цуцалсан"] } },
-        { status: "Цуцалсан", stockRestored: { $ne: true } }
-      ]
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Ulaanbaatar",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
     });
 
-    if (activeOrder) {
-      return res.status(409).json({
-        error: "Энэ бараа дуусаагүй захиалгад байгаа тул одоогоор устгах боломжгүй."
-      });
+    const todayParts = formatter.format(new Date()).split("-").map(Number);
+    const dailyMap = new Map();
+
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(Date.UTC(
+        todayParts[0], todayParts[1] - 1, todayParts[2] - i
+      ));
+      const key = date.toISOString().slice(0, 10);
+      dailyMap.set(key, { date: key, revenue: 0, orders: 0 });
     }
 
-    const product = await Product.findByIdAndDelete(productId);
+    const productMap = new Map();
 
-    if (!product) {
-      return res.status(404).json({ error: "Бараа олдсонгүй" });
+    for (const order of completed) {
+      if (order.createdAt) {
+        const key = formatter.format(new Date(order.createdAt));
+        const day = dailyMap.get(key);
+
+        if (day) {
+          day.revenue += Number(order.total || 0);
+          day.orders += 1;
+        }
+      }
+
+      for (const item of order.items || []) {
+        const name = String(item.name || "Тодорхойгүй бараа");
+        const quantity = Number(item.quantity || 0);
+        const current = productMap.get(name) || {
+          name, quantity: 0, revenue: 0
+        };
+
+        current.quantity += quantity;
+        current.revenue += Number(item.price || 0) * quantity;
+        productMap.set(name, current);
+      }
     }
 
-    res.json({ ok: true, message: "Бараа бүр мөсөн устгагдлаа." });
+    const topProducts = [...productMap.values()]
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+
+    res.set("Cache-Control", "no-store");
+    res.json({
+      totalOrders: orders.length,
+      completedOrders: completed.length,
+      activeOrders: active.length,
+      newOrders: orders.filter(order => order.status === "Шинэ").length,
+      cancelledOrders: cancelled.length,
+      totalRevenue,
+      dailySales: [...dailyMap.values()],
+      topProducts
+    });
   } catch (error) {
-    console.error("Permanent product delete error:", error.message);
-    res.status(500).json({ error: "Бараа устгахад алдаа гарлаа." });
+    console.error("Admin analytics error:", error);
+    res.status(500).json({ error: "Статистик авахад алдаа гарлаа." });
   }
 });
 
-/* =========================
-   ADMIN INVENTORY
-========================= */
 
-app.get("/api/admin/inventory/movements", adminOnly, async (req, res) => {
+// Админ захиалгууд харах
+app.get("/api/admin/orders", requireAdmin, async (req, res) => {
   try {
-    const movements = await StockMovement.find()
+    const orders = await Order.find()
       .sort({ createdAt: -1 })
-      .limit(300);
+      .lean();
 
-    res.json(movements);
+    res.set("Cache-Control", "no-store");
+    res.json(orders);
   } catch (error) {
-    console.error("Inventory history error:", error.message);
-    res.status(500).json({ error: "Агуулахын түүх ачаалж чадсангүй." });
+    console.error("Admin orders error:", error);
+    res.status(500).json({ error: "Захиалгуудыг авахад алдаа гарлаа." });
   }
 });
 
-app.post("/api/admin/inventory/movements", adminOnly, async (req, res) => {
-  let changedProduct = null;
+
+// Админ захиалгын төлөв өөрчлөх
+app.patch("/api/admin/orders/:id/status", requireAdmin, async (req, res) => {
+  const allowed = [
+    "Баталгаажсан",
+    "Бэлтгэж байна",
+    "Хүргэлтэд гарсан",
+    "Дууссан",
+    "Цуцалсан"
+  ];
+
+  const status = req.body?.status;
+
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ error: "Төлөв буруу байна." });
+  }
+
+  const session = await mongoose.startSession();
+  let updatedOrder;
 
   try {
-    const productId = String(req.body.productId || "");
-    const type = String(req.body.type || "");
-    const quantity = Number(req.body.quantity);
-    const note = String(req.body.note || "").trim().slice(0, 300);
+    await session.withTransaction(async () => {
+      const order = await Order.findById(req.params.id).session(session);
 
-    if (!["Орлого", "Зарлага"].includes(type)) {
-      return res.status(400).json({ error: "Үйлдлийн төрөл буруу байна." });
+      if (!order) {
+        const error = new Error("Захиалга олдсонгүй.");
+        error.statusCode = 404;
+        throw error;
+      }
+
+      // Баталгаажуулах үед үлдэгдэл хасах
+      if (status === "Баталгаажсан" && !order.stockDeducted) {
+        for (const item of order.items) {
+          const product = await Product.findOneAndUpdate(
+            {
+              _id: item.productId,
+              stock: { $gte: item.quantity }
+            },
+            {
+              $inc: { stock: -item.quantity }
+            },
+            {
+              new: true,
+              session
+            }
+          );
+
+          if (!product) {
+            const error = new Error(
+              `${item.name}: үлдэгдэл хүрэлцэхгүй байна.`
+            );
+            error.statusCode = 409;
+            throw error;
+          }
+        }
+
+        order.stockDeducted = true;
+      }
+
+      // Цуцлах үед хассан үлдэгдлийг буцаах
+      if (status === "Цуцалсан" && order.stockDeducted) {
+        for (const item of order.items) {
+          const product = await Product.findByIdAndUpdate(
+            item.productId,
+            { $inc: { stock: item.quantity } },
+            { new: true, session }
+          );
+
+          if (!product) {
+            throw new Error(`${item.name}: бараа олдсонгүй.`);
+          }
+        }
+
+        order.stockDeducted = false;
+      }
+
+      // Өмнөх төлөвийг хадгалах
+      const previousStatus = order.status || "Шинэ";
+
+      // Хуучин захиалгад түүх байхгүй бол эхний төлөвийг нөхөж бүртгэх
+      if (!order.statusHistory || order.statusHistory.length === 0) {
+        order.statusHistory = [{
+          status: previousStatus,
+          changedAt: order.createdAt || new Date()
+        }];
+      }
+
+      // Зөвхөн төлөв өөрчлөгдсөн үед шинэ түүх нэмэх
+      if (previousStatus !== status) {
+        order.statusHistory.push({
+          status,
+          changedAt: new Date()
+        });
+      }
+
+      order.status = status;
+      await order.save({ session });
+      updatedOrder = order;
+    });
+
+    res.json({ ok: true, order: updatedOrder });
+
+  } catch (error) {
+    console.error("Update order status error:", error);
+
+    res.status(error.statusCode || 400).json({
+      error: error.message || "Төлөв өөрчлөхөд алдаа гарлаа."
+    });
+
+  } finally {
+    await session.endSession();
+  }
+});
+
+// Админ захиалгын барааны өртөг засах
+app.patch("/api/admin/orders/:id/items/:index/cost", requireAdmin, async (req, res) => {
+  try {
+    const index = Number(req.params.index);
+    const cost = Number(req.body?.cost);
+
+    if (!Number.isInteger(index) || index < 0) {
+      return res.status(400).json({ error: "Барааны индекс буруу байна." });
     }
 
-    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 100000) {
-      return res.status(400).json({ error: "Тоо ширхэг 1-100000 бүхэл тоо байх ёстой." });
+    if (!Number.isFinite(cost) || cost < 0) {
+      return res.status(400).json({ error: "Өртөг 0 буюу түүнээс дээш байх ёстой." });
     }
 
-    const product = await Product.findById(productId);
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ error: "Захиалга олдсонгүй." });
+    }
+
+    if (!order.items || !order.items[index]) {
+      return res.status(404).json({ error: "Захиалгын бараа олдсонгүй." });
+    }
+
+    order.items[index].cost = cost;
+    await order.save();
+
+    res.json({ ok: true, cost, message: "Барааны өртөг хадгалагдлаа." });
+  } catch (error) {
+    console.error("Update order item cost error:", error);
+    res.status(400).json({ error: "Өртөг хадгалахад алдаа гарлаа." });
+  }
+});
+
+// Бараа нэмэх
+app.post("/api/products", requireAdmin, async (req, res) => {
+  try {
+    const data = req.body || {};
+    const product = new Product({
+      name: data.name,
+      category: data.category,
+      price: Number(data.price),
+      cost: Number(data.cost || 0),
+      stock: Number(data.stock),
+      image: data.image || "",
+      description: data.description || ""
+    });
+    await product.save();
+    res.status(201).json(product);
+  } catch (error) {
+    res.status(400).json({
+      error: "Бараа нэмэхэд алдаа гарлаа.",
+      detail: error.message
+    });
+  }
+});
+
+// Бараа засах
+app.patch("/api/products/:id", requireAdmin, async (req, res) => {
+  try {
+    const allowed = ["name", "category", "price", "cost", "stock", "image", "description"];
+    const updates = {};
+
+    for (const key of allowed) {
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, key)) {
+        updates[key] = req.body[key];
+      }
+    }
+
+    if (updates.price !== undefined) updates.price = Number(updates.price);
+    if (updates.stock !== undefined) updates.stock = Number(updates.stock);
+
+    const product = await Product.findByIdAndUpdate(
+      req.params.id,
+      updates,
+      { new: true, runValidators: true }
+    );
 
     if (!product) {
       return res.status(404).json({ error: "Бараа олдсонгүй." });
     }
 
-    const before = product.stock;
-    const after = type === "Орлого"
-      ? before + quantity
-      : before - quantity;
-
-    if (after < 0) {
-      return res.status(409).json({ error: "Агуулахад хүрэлцэхүйц үлдэгдэл алга." });
-    }
-
-    changedProduct = await Product.findOneAndUpdate(
-      { _id: productId, stock: before },
-      { $inc: { stock: type === "Орлого" ? quantity : -quantity } },
-      { new: true }
-    );
-
-    if (!changedProduct) {
-      return res.status(409).json({
-        error: "Үлдэгдэл зэрэг өөрчлөгдсөн байна. Дахин оролдоно уу."
-      });
-    }
-
-    try {
-      const movement = await StockMovement.create({
-        productId: String(product._id),
-        productName: product.name,
-        type,
-        quantity,
-        before,
-        after,
-        note,
-        source: "manual"
-      });
-
-      return res.status(201).json({
-        ok: true,
-        product: changedProduct,
-        movement
-      });
-    } catch (historyError) {
-      await Product.updateOne(
-        { _id: productId, stock: after },
-        { $inc: { stock: type === "Орлого" ? -quantity : quantity } }
-      );
-
-      changedProduct = null;
-      throw historyError;
-    }
+    res.json(product);
   } catch (error) {
-    console.error("Inventory movement error:", error.message);
-    res.status(500).json({ error: "Агуулахын бүртгэл хадгалж чадсангүй." });
+    res.status(400).json({
+      error: "Бараа засахад алдаа гарлаа.",
+      detail: error.message
+    });
   }
 });
 
-/* =========================
-   ADMIN ORDERS
-========================= */
+// Бараа устгах
+app.delete("/api/products/:id", requireAdmin, async (req, res) => {
+  try {
+    const product = await Product.findByIdAndDelete(req.params.id);
 
-app.get("/api/admin/orders", adminOnly, async (req, res) => {
-  res.json(
-    await Order.find()
-      .sort({ createdAt: -1 })
-      .limit(300)
-  );
+    if (!product) {
+      return res.status(404).json({ error: "Бараа олдсонгүй." });
+    }
+
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(400).json({ error: "Бараа устгахад алдаа гарлаа." });
+  }
 });
 
-app.patch("/api/admin/orders/:id", adminOnly, async (req, res) => {
+
+// Засварын бүртгэлүүдийг харах
+app.get("/api/repairs", requireAdmin, async (req, res) => {
+  try {
+    const repairs = await Repair.find().sort({ createdAt: -1 }).lean();
+    res.json(repairs);
+  } catch (error) {
+    res.status(500).json({ error: "Бүртгэлүүдийг авахад алдаа гарлаа." });
+  }
+});
+
+// Шинэ засварын бүртгэл үүсгэх
+app.post("/api/repairs", requireAdmin, async (req, res) => {
+  try {
+    const data = req.body || {};
+    const repair = new Repair({
+      customerName: data.customerName,
+      phone: data.phone,
+      bicycleType: data.bicycleType,
+      brand: data.brand,
+      model: data.model,
+      issue: data.issue,
+      photos: Array.isArray(data.photos) ? data.photos : [],
+      partsUsed: data.partsUsed,
+      mechanic: data.mechanic,
+      laborCost: data.laborCost,
+      partsCost: data.partsCost,
+      total: data.total,
+      status: data.status,
+      paymentStatus: data.paymentStatus,
+      notes: data.notes,
+      repairNumber: "VX-" + Date.now().toString().slice(-8) +
+        Math.floor(100 + Math.random() * 900)
+    });
+
+    await repair.save();
+    res.status(201).json(repair);
+  } catch (error) {
+    res.status(400).json({ error: "Бүртгэл үүсгэж чадсангүй.", detail: error.message });
+  }
+});
+
+// Засварын бүртгэл засах
+app.patch("/api/repairs/:id", requireAdmin, async (req, res) => {
   try {
     const allowed = [
-      "Шинэ",
-      "Баталгаажсан",
-      "Бэлтгэж байна",
-      "Хүргэлтэд гарсан",
-      "Хүргэгдсэн",
-      "Цуцалсан"
+      "customerName", "phone", "bicycleType", "brand", "model",
+      "issue", "photos", "partsUsed", "mechanic", "laborCost",
+      "partsCost", "total", "status", "paymentStatus", "notes"
     ];
 
-    const patch = {};
-    let stockAction = null;
-
-    if (allowed.includes(req.body.status)) {
-      patch.status = req.body.status;
-    }
-
-    if (["Төлөөгүй", "Төлсөн", "Буцаасан"].includes(req.body.paymentStatus)) {
-      patch.paymentStatus = req.body.paymentStatus;
-    }
-
-    const existingOrder = await Order.findById(req.params.id);
-
-    if (!existingOrder) {
-      return res.status(404).json({ error: "Захиалга олдсонгүй" });
-    }
-
-    // Захиалга цуцлах үед үлдэгдлийг буцаан нэмнэ
-    if (patch.status === "Цуцалсан" && !existingOrder.stockRestored) {
-      const restoredItems = [];
-
-      try {
-        const combinedItems = combineOrderItems(existingOrder.items || []);
-
-        for (const item of combinedItems) {
-          const result = await Product.updateOne(
-            { _id: item.productId },
-            { $inc: { stock: item.quantity } }
-          );
-
-          if (!result.modifiedCount) {
-            throw new Error(`${item.name || "Бараа"} олдсонгүй.`);
-          }
-
-          restoredItems.push(item);
-        }
-
-        await recordOrderStockMovements(existingOrder, "Орлого", "cancelled");
-      } catch (stockError) {
-        await StockMovement.deleteMany({
-          orderId: String(existingOrder._id),
-          eventKey: { $regex: `^${existingOrder._id}:cancelled:` }
-        }).catch(() => {});
-        let rollbackFailed = false;
-
-        for (const item of restoredItems) {
-          try {
-            const result = await Product.updateOne(
-              { _id: item.productId, stock: { $gte: item.quantity } },
-              { $inc: { stock: -item.quantity } }
-            );
-
-            if (!result.modifiedCount) rollbackFailed = true;
-          } catch (rollbackError) {
-            rollbackFailed = true;
-            console.error("Stock restore rollback failed:", rollbackError.message);
-          }
-        }
-
-        console.error("Order cancellation stock error:", stockError.message);
-
-        return res.status(rollbackFailed ? 500 : 409).json({
-          error: rollbackFailed
-            ? "Үлдэгдэл буцаах явцад алдаа гарлаа. Админ үлдэгдлийг шалгана уу."
-            : `Захиалга цуцлагдсангүй: ${stockError.message}`
-        });
+    const updates = {};
+    for (const key of allowed) {
+      if (req.body && Object.prototype.hasOwnProperty.call(req.body, key)) {
+        updates[key] = req.body[key];
       }
-
-      patch.stockRestored = true;
-      stockAction = { type: "cancelled", items: restoredItems };
     }
 
-    // Цуцалсан захиалгыг дахин идэвхжүүлэх үед үлдэгдлийг хасна
-    if (
-      existingOrder.status === "Цуцалсан" &&
-      existingOrder.stockRestored &&
-      patch.status &&
-      patch.status !== "Цуцалсан"
-    ) {
-      const deductedItems = [];
+    const repair = await Repair.findByIdAndUpdate(
+      req.params.id,
+      updates,
+      { new: true, runValidators: true }
+    );
 
-      try {
-        const combinedItems = combineOrderItems(existingOrder.items || []);
+    if (!repair) {
+      return res.status(404).json({ error: "Бүртгэл олдсонгүй." });
+    }
 
-        for (const item of combinedItems) {
-          const result = await Product.updateOne(
-            {
-              _id: item.productId,
-              stock: { $gte: item.quantity }
+    res.json(repair);
+  } catch (error) {
+    res.status(400).json({ error: "Бүртгэл засахад алдаа гарлаа.", detail: error.message });
+  }
+});
+
+// Засварын бүртгэл устгах
+app.delete("/api/repairs/:id", requireAdmin, async (req, res) => {
+  try {
+    const repair = await Repair.findByIdAndDelete(req.params.id);
+
+    if (!repair) {
+      return res.status(404).json({ error: "Бүртгэл олдсонгүй." });
+    }
+
+    res.json({ ok: true, message: "Бүртгэл устгагдлаа." });
+  } catch (error) {
+    res.status(400).json({ error: "Устгах үед алдаа гарлаа." });
+  }
+});
+
+
+// Админ статистик
+
+// VELTRIX AI BUSINESS CHAT API
+app.post("/api/admin/business-chat", requireAdmin, async (req, res) => {
+  try {
+    const question = String(req.body.question || "").trim().toLowerCase();
+
+    if (!question || question.length > 300) {
+      return res.status(400).json({ error: "Асуултаа зөв оруулна уу." });
+    }
+
+    const [products, topProducts, profitData, weeklyOrders] = await Promise.all([
+      Product.find({}).select("name stock price cost").sort({ stock: 1 }).lean(),
+
+      Order.aggregate([
+        { $match: { status: "Дууссан" } },
+        { $unwind: "$items" },
+        {
+          $group: {
+            _id: "$items.name",
+            quantity: { $sum: "$items.quantity" },
+            revenue: {
+              $sum: { $multiply: ["$items.price", "$items.quantity"] }
+            }
+          }
+        },
+        { $sort: { quantity: -1, revenue: -1 } },
+        { $limit: 5 }
+      ]),
+
+      Order.aggregate([
+        { $match: { status: "Дууссан" } },
+        { $unwind: "$items" },
+        {
+          $group: {
+            _id: "$_id",
+            revenue: {
+              $sum: { $multiply: ["$items.price", "$items.quantity"] }
             },
-            { $inc: { stock: -item.quantity } }
-          );
-
-          if (!result.modifiedCount) {
-            throw new Error(
-              `${item.name || "Бараа"}-ны үлдэгдэл хүрэлцэхгүй байна.`
-            );
+            cost: {
+              $sum: {
+                $multiply: [
+                  { $ifNull: ["$items.cost", 0] },
+                  "$items.quantity"
+                ]
+              }
+            },
+            costCount: {
+              $sum: {
+                $cond: [
+                  { $ne: [{ $type: "$items.cost" }, "missing"] },
+                  1,
+                  0
+                ]
+              }
+            },
+            itemCount: { $sum: 1 }
           }
-
-          deductedItems.push(item);
-        }
-
-        await recordOrderStockMovements(existingOrder, "Зарлага", "reactivated");
-      } catch (stockError) {
-        await StockMovement.deleteMany({
-          orderId: String(existingOrder._id),
-          eventKey: { $regex: `^${existingOrder._id}:reactivated:` }
-        }).catch(() => {});
-        let rollbackFailed = false;
-
-        for (const item of deductedItems) {
-          try {
-            const result = await Product.updateOne(
-              { _id: item.productId },
-              { $inc: { stock: item.quantity } }
-            );
-
-            if (!result.modifiedCount) rollbackFailed = true;
-          } catch (rollbackError) {
-            rollbackFailed = true;
-            console.error("Stock deduction rollback failed:", rollbackError.message);
+        },
+        {
+          $match: {
+            $expr: { $eq: ["$costCount", "$itemCount"] }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            cost: { $sum: "$cost" },
+            profit: {
+              $sum: { $subtract: ["$revenue", "$cost"] }
+            },
+            orders: { $sum: 1 }
           }
         }
+      ]),
 
-        console.error("Order reactivation stock error:", stockError.message);
+      Order.aggregate([
+        {
+          $match: {
+            status: "Дууссан",
+            createdAt: {
+              $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+            }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            revenue: { $sum: "$total" },
+            orders: { $sum: 1 }
+          }
+        }
+      ])
+    ]);
 
-        return res.status(rollbackFailed ? 500 : 409).json({
-          error: rollbackFailed
-            ? "Үлдэгдэл буцаах явцад алдаа гарлаа. Админ үлдэгдлийг шалгана уу."
-            : `Захиалгыг сэргээсэнгүй: ${stockError.message}`
-        });
-      }
+    const money = value =>
+      Number(value || 0).toLocaleString("mn-MN") + " ₮";
 
-      patch.stockRestored = false;
-      stockAction = { type: "reactivated", items: deductedItems };
+    const profit = profitData[0] || {};
+    const weekly = weeklyOrders[0] || {};
+    let answer;
+
+    if (question.includes("ашиг") || question.includes("өртөг")) {
+      answer =
+        `📊 VELTRIX ашгийн мэдээлэл:\n` +
+        `Нийт ашиг: ${money(profit.profit)}\n` +
+        `Бүртгэгдсэн өртөг: ${money(profit.cost)}\n` +
+        `Өртөг бүрэн бүртгэгдсэн захиалга: ${profit.orders || 0}\n\n` +
+        `Зөвхөн өртөг нь бүрэн бүртгэгдсэн дууссан захиалгыг тооцсон.`;
+    } else if (
+      question.includes("шилдэг") ||
+      question.includes("их зарагдсан") ||
+      question.includes("борлуулсан бараа")
+    ) {
+      answer = topProducts.length
+        ? "🏆 Хамгийн их зарагдсан бараанууд:\n" +
+          topProducts.map((item, index) =>
+            `${index + 1}. ${item._id} — ${item.quantity} ширхэг, ${money(item.revenue)}`
+          ).join("\n")
+        : "Одоогоор дууссан захиалгын борлуулалт алга.";
+    } else if (
+      question.includes("нөөц") ||
+      question.includes("үлдэгдэл") ||
+      question.includes("бараа")
+    ) {
+      const lowStock = products.filter(item => item.stock <= 5);
+      answer = lowStock.length
+        ? "⚠️ Нөөц багатай бараанууд:\n" +
+          lowStock.map(item => `• ${item.name} — ${item.stock} ширхэг`).join("\n")
+        : "5 буюу түүнээс бага үлдэгдэлтэй бараа алга.";
+      answer += `\n\nНийт бараа: ${products.length}`;
+    } else if (
+      question.includes("борлуулалт") ||
+      question.includes("орлого") ||
+      question.includes("долоо хоног")
+    ) {
+      const completedOrders = await Order.countDocuments({ status: "Дууссан" });
+      answer =
+        `📈 Сүүлийн 7 хоногийн үзүүлэлт:\n` +
+        `Орлого: ${money(weekly.revenue)}\n` +
+        `Дууссан захиалга: ${weekly.orders || 0}\n` +
+        `Нийт дууссан захиалга: ${completedOrders}`;
+    } else {
+      answer =
+        "Дараах асуултуудаас сонгоорой:\n" +
+        "• Нийт ашиг хэд вэ?\n" +
+        "• Хамгийн их зарагдсан бараа юу вэ?\n" +
+        "• Нөөц багатай бараануудыг харуул.\n" +
+        "• Сүүлийн 7 хоногийн борлуулалт ямар байна?";
     }
 
-    // Төлөв өөрчлөгдсөн үед түүхэнд шинэ бичлэг нэмнэ
-    if (patch.status && patch.status !== existingOrder.status) {
-      patch.$push = {
-        statusHistory: {
-          status: patch.status,
-          changedAt: new Date(),
-          note: "Админ захиалгын төлөвийг шинэчилсэн"
+    res.set("Cache-Control", "no-store");
+    res.json({ answer });
+  } catch (error) {
+    console.error("Business chat error:", error);
+    res.status(500).json({
+      error: "Бизнесийн мэдээлэл авахад алдаа гарлаа."
+    });
+  }
+});
+// VELTRIX AI BUSINESS CHAT API END
+
+app.get("/api/admin/stats", requireAdmin, async (req, res) => {
+  try {
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(start.getDate() - 6);
+    start.setHours(0, 0, 0, 0);
+
+    const previousStart = new Date(start);
+    previousStart.setDate(previousStart.getDate() - 7);
+    const forecastStart = new Date(now);
+    forecastStart.setDate(forecastStart.getDate() - 30);
+    const previousForecastStart = new Date(now);
+    previousForecastStart.setDate(previousForecastStart.getDate() - 60);
+
+    const customerStart = new Date(now);
+    customerStart.setDate(customerStart.getDate() - 30);
+
+    const [counts, revenue, costSummary, daily, topProducts, lowStock, previousWeek, forecastSales, previousForecastSales, allProducts, customerTotals, customerRepeat, topCustomers] = await Promise.all([
+      Order.aggregate([
+        {
+          $group: {
+            _id: "$status",
+            count: { $sum: 1 }
+          }
         }
-      };
-    }
+      ]),
+      Order.aggregate([
+        { $match: { status: "Дууссан" } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: "$total" }
+          }
+        }
+      ]),
+      Order.aggregate([
+        { $match: { status: "Дууссан" } },
+        { $unwind: "$items" },
+        {
+          $group: {
+            _id: "$_id",
+            totalCost: {
+              $sum: {
+                $multiply: [
+                  { $ifNull: ["$items.cost", 0] },
+                  "$items.quantity"
+                ]
+              }
+            },
+            itemRevenue: {
+              $sum: {
+                $multiply: ["$items.price", "$items.quantity"]
+              }
+            },
+            costItemCount: {
+              $sum: {
+                $cond: [
+                  { $ne: [{ $type: "$items.cost" }, "missing"] },
+                  1,
+                  0
+                ]
+              }
+            },
+            itemCount: { $sum: 1 }
+          }
+        },
+        {
+          $match: {
+            $expr: { $eq: ["$costItemCount", "$itemCount"] }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalCost: { $sum: "$totalCost" },
+            grossProfit: {
+              $sum: { $subtract: ["$itemRevenue", "$totalCost"] }
+            },
+            orders: { $sum: 1 }
+          }
+        }
+      ]),
+      Order.aggregate([
+        {
+          $match: {
+            status: "Дууссан",
+            createdAt: { $gte: start }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: "%Y-%m-%d", date: "$createdAt" }
+            },
+            total: { $sum: "$total" },
+            orders: { $sum: 1 }
+          }
+        },
+        { $sort: { _id: 1 } }
+      ]),
+      Order.aggregate([
+        { $match: { status: "Дууссан" } },
+        { $unwind: "$items" },
+        {
+          $group: {
+            _id: "$items.name",
+            quantity: { $sum: "$items.quantity" },
+            revenue: {
+              $sum: {
+                $multiply: ["$items.price", "$items.quantity"]
+              }
+            }
+          }
+        },
+        { $sort: { quantity: -1, revenue: -1 } },
+        { $limit: 5 }
+      ]),
+      Product.find({ stock: { $lte: 5 } })
+        .select("name category stock")
+        .sort({ stock: 1, name: 1 })
+        .limit(50)
+        .lean(),
+      Order.aggregate([
+        {
+          $match: {
+            status: "Дууссан",
+            createdAt: { $gte: previousStart, $lt: start }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: "$total" }
+          }
+        }
+      ]),
+      Order.aggregate([
+        {
+          $match: {
+            status: "Дууссан",
+            createdAt: { $gte: forecastStart, $lt: now }
+          }
+        },
+        { $unwind: "$items" },
+        {
+          $group: {
+            _id: "$items.name",
+            quantity: { $sum: "$items.quantity" }
+          }
+        }
+      ]),
+      Order.aggregate([
+        {
+          $match: {
+            status: "Дууссан",
+            createdAt: {
+              $gte: previousForecastStart,
+              $lt: forecastStart
+            }
+          }
+        },
+        { $unwind: "$items" },
+        {
+          $group: {
+            _id: "$items.name",
+            quantity: { $sum: "$items.quantity" }
+          }
+        }
+      ]),
+      Product.find({})
+        .select("name stock")
+        .sort({ name: 1 })
+        .lean(),
+      User.countDocuments({}),
+      Order.aggregate([
+        { $match: { status: "Дууссан", userId: { $exists: true, $ne: null } } },
+        { $group: { _id: "$userId", orders: { $sum: 1 } } },
+        { $match: { orders: { $gte: 2 } } },
+        { $count: "total" }
+      ]),
+      Order.aggregate([
+        { $match: { status: "Дууссан", userId: { $exists: true, $ne: null } } },
+        {
+          $group: {
+            _id: "$userId",
+            orderCount: { $sum: 1 },
+            totalSpent: { $sum: "$total" },
+            lastOrderAt: { $max: "$createdAt" }
+          }
+        },
+        { $sort: { totalSpent: -1, orderCount: -1 } },
+        { $limit: 5 },
+        {
+          $lookup: {
+            from: User.collection.name,
+            localField: "_id",
+            foreignField: "_id",
+            as: "customer"
+          }
+        },
+        { $unwind: { path: "$customer", preserveNullAndEmptyArrays: true } },
+        {
+          $project: {
+            _id: 0,
+            name: { $ifNull: ["$customer.name", "Хэрэглэгч"] },
+            phone: {
+              $cond: [
+                { $gte: [{ $strLenCP: { $ifNull: ["$customer.phone", ""] } }, 4] },
+                {
+                  $concat: [
+                    { $substrCP: [{ $ifNull: ["$customer.phone", ""] }, 0, 2] },
+                    "****",
+                    {
+                      $substrCP: [
+                        { $ifNull: ["$customer.phone", ""] },
+                        { $subtract: [{ $strLenCP: { $ifNull: ["$customer.phone", ""] } }, 2] },
+                        2
+                      ]
+                    }
+                  ]
+                },
+                "Нууцалсан"
+              ]
+            },
+            orderCount: 1,
+            totalSpent: 1,
+            lastOrderAt: 1
+          }
+        }
+      ])
+    ]);
 
-    let order;
-
-    try {
-      order = await Order.findByIdAndUpdate(
-        req.params.id,
-        patch,
-        { new: true }
+    const forecastProducts = allProducts.map(product => {
+      const sold = forecastSales.find(item => item._id === product.name);
+      const previousSold = previousForecastSales.find(
+        item => item._id === product.name
       );
 
-      if (!order) {
-        throw new Error("ORDER_SAVE_FAILED");
-      }
-    } catch (saveError) {
-      let rollbackFailed = false;
+      const sold30Days = Number(sold?.quantity || 0);
+      const previousSold30Days = Number(previousSold?.quantity || 0);
 
-      if (stockAction) {
-        for (const item of stockAction.items) {
-          try {
-            const isCancellation = stockAction.type === "cancelled";
+      let trend = "Тогтвортой";
+      let trendPercent = 0;
 
-            const result = await Product.updateOne(
-              isCancellation
-                ? {
-                    _id: item.productId,
-                    stock: { $gte: item.quantity }
-                  }
-                : { _id: item.productId },
-              {
-                $inc: {
-                  stock: isCancellation
-                    ? -item.quantity
-                    : item.quantity
-                }
-              }
-            );
+      if (previousSold30Days === 0 && sold30Days > 0) {
+        trend = "Шинэ эрэлт";
+        trendPercent = null;
+      } else if (previousSold30Days > 0) {
+        trendPercent = Number(
+          (((sold30Days - previousSold30Days) / previousSold30Days) * 100).toFixed(1)
+        );
 
-            if (!result.modifiedCount) {
-              rollbackFailed = true;
-            }
-          } catch (rollbackError) {
-            rollbackFailed = true;
-            console.error(
-              "Order save rollback failed:",
-              rollbackError.message
-            );
-          }
-        }
-
-        if (!rollbackFailed) {
-          try {
-            const eventName = stockAction.type;
-
-            await StockMovement.deleteMany({
-              orderId: String(existingOrder._id),
-              eventKey: {
-                $regex: `^${existingOrder._id}:${eventName}:`
-              }
-            });
-          } catch (historyError) {
-            rollbackFailed = true;
-            console.error(
-              "Movement history rollback failed:",
-              historyError.message
-            );
-          }
-        }
+        if (trendPercent > 0) trend = "Өсөж байна";
+        else if (trendPercent < 0) trend = "Буурч байна";
       }
 
-      console.error("Order save error:", saveError.message);
+      const dailySales = sold30Days / 30;
+      const stock = Number(product.stock || 0);
+      const daysRemaining = dailySales > 0 ? stock / dailySales : null;
+      const suggestedRestock = dailySales > 0
+        ? Math.max(Math.ceil(dailySales * 14) - stock, 0)
+        : 0;
 
-      return res.status(500).json({
-        error: rollbackFailed
-          ? "Захиалгын хадгалалт бүтэлгүйтлээ. Агуулахын үлдэгдэл болон түүхийг админ шалгана уу."
-          : "Захиалга хадгалагдсангүй. Агуулахын өөрчлөлтийг буцаалаа."
-      });
-    }
-
-    // Онооны тэмдэглэгээ болон онооны нэмэгдлийг нэг transaction-д гүйцэтгэнэ
-    if (order.status === "Хүргэгдсэн" && !order.pointsAwarded) {
-      const session = await mongoose.startSession();
-
-      try {
-        await session.withTransaction(async () => {
-          const claim = await Order.updateOne(
-            {
-              _id: order._id,
-              status: "Хүргэгдсэн",
-              pointsAwarded: { $ne: true }
-            },
-            {
-              $set: { pointsAwarded: true }
-            },
-            { session }
-          );
-
-          if (claim.modifiedCount === 1) {
-            const earned = Math.floor((order.total || 0) * 0.01);
-
-            if (earned > 0) {
-              await Loyalty.findOneAndUpdate(
-                { phone: order.phone },
-                {
-                  $inc: {
-                    points: earned,
-                    totalEarned: earned
-                  }
-                },
-                {
-                  upsert: true,
-                  new: true,
-                  setDefaultsOnInsert: true,
-                  session
-                }
-              );
-            }
-          }
-        });
-
-        const latestOrder = await Order.findById(order._id)
-          .select("pointsAwarded")
-          .lean();
-
-        order.pointsAwarded = Boolean(latestOrder?.pointsAwarded);
-      } finally {
-        await session.endSession();
-      }
-    }
-
-    if (
-      patch.status &&
-      patch.status !== existingOrder.status &&
-      order.userId
-    ) {
-      await createUserNotification({
-        userId: String(order.userId),
-        orderId: String(order._id),
-        orderCode: order.code,
-        type: "order_status",
-        title: "Захиалгын төлөв шинэчлэгдлээ",
-        message: `${order.code} захиалгын шинэ төлөв: ${order.status}`
-      });
-
-      await sendPushToUser(String(order.userId), {
-        title: "VELTRIX — Захиалгын шинэ төлөв",
-        body: `${order.code} захиалгын төлөв: ${order.status}`,
-        url: "/"
-      });
-    }
-
-    res.json(order);
-  } catch {
-    res.status(500).json({ error: "Захиалга шинэчилж чадсангүй" });
-  }
-});
-
-/* =========================
-   ADMIN REVIEWS
-========================= */
-
-app.get("/api/admin/reviews", adminOnly, async (req, res) => {
-  res.json(await Review.find().sort({ createdAt: -1 }).limit(300));
-});
-
-app.patch("/api/admin/reviews/:id", adminOnly, async (req, res) => {
-  const review = await Review.findByIdAndUpdate(
-    req.params.id,
-    { approved: Boolean(req.body.approved) },
-    { new: true }
-  );
-
-  if (!review) {
-    return res.status(404).json({ error: "Үнэлгээ олдсонгүй" });
-  }
-
-  res.json(review);
-});
-
-app.delete("/api/admin/reviews/:id", adminOnly, async (req, res) => {
-  await Review.findByIdAndDelete(req.params.id);
-  res.json({ ok: true });
-});
-
-/* =========================
-   ADMIN CHAT
-========================= */
-
-app.get("/api/admin/chats", adminOnly, async (req, res) => {
-  const chats = await ChatMessage.aggregate([
-    {
-      $sort: { createdAt: -1 }
-    },
-    {
-      $group: {
-        _id: "$orderCode",
-        lastMessage: { $first: "$message" },
-        sender: { $first: "$sender" },
-        updatedAt: { $first: "$createdAt" },
-        unread: {
-          $sum: {
-            $cond: [
-              { $and: [{ $eq: ["$sender", "customer"] }, { $eq: ["$read", false] }] },
-              1,
-              0
-            ]
-          }
-        }
-      }
-    },
-    { $sort: { updatedAt: -1 } }
-  ]);
-
-  res.json(chats);
-});
-
-app.get("/api/admin/chats/:code", adminOnly, async (req, res) => {
-  const code = String(req.params.code).toUpperCase();
-
-  await ChatMessage.updateMany(
-    { orderCode: code, sender: "customer" },
-    { read: true }
-  );
-
-  const messages = await ChatMessage.find({ orderCode: code })
-    .sort({ createdAt: 1 });
-
-  res.json(messages);
-});
-
-app.post("/api/admin/chats/:code", adminOnly, async (req, res) => {
-  const message = String(req.body.message || "").trim();
-
-  if (!message || message.length > 2000) {
-    return res.status(400).json({ error: "Мессежээ шалгана уу" });
-  }
-
-  const code = String(req.params.code).toUpperCase();
-  const order = await Order.findOne({ code });
-
-  if (!order) {
-    return res.status(404).json({ error: "Захиалга олдсонгүй" });
-  }
-
-  const saved = await ChatMessage.create({
-    orderCode: code,
-    sender: "admin",
-    message
-  });
-
-  res.status(201).json(saved);
-});
-
-/* =========================
-   ADMIN COUPONS
-========================= */
-
-app.get("/api/admin/coupons", adminOnly, async (req, res) => {
-  res.json(await Coupon.find().sort({ createdAt: -1 }));
-});
-
-app.post("/api/admin/coupons", adminOnly, async (req, res) => {
-  try {
-    const c = await Coupon.create({
-      code: String(req.body.code || "").toUpperCase(),
-      percent: Number(req.body.percent),
-      expiresAt: req.body.expiresAt || null
+      return {
+        name: product.name,
+        stock,
+        sold30Days,
+        previousSold30Days,
+        trend,
+        trendPercent,
+        dailySales: Number(dailySales.toFixed(2)),
+        daysRemaining: daysRemaining === null
+          ? null
+          : Number(daysRemaining.toFixed(1)),
+        suggestedRestock
+      };
     });
 
-    res.status(201).json(c);
-  } catch {
-    res.status(400).json({
-      error: "Купоны код давхардсан эсвэл мэдээлэл буруу байна"
+    const count = status =>
+      counts.find(item => item._id === status)?.count || 0;
+
+    res.set("Cache-Control", "no-store");
+    res.json({
+      totalOrders: counts.reduce((sum, item) => sum + item.count, 0),
+      newOrders: count("Шинэ"),
+      completedOrders: count("Дууссан"),
+      cancelledOrders: count("Цуцалсан"),
+      revenue: revenue[0]?.total || 0,
+      totalCost: costSummary[0]?.totalCost || 0,
+      grossProfit: costSummary[0]?.grossProfit || 0,
+      profitTrackedOrders: costSummary[0]?.orders || 0,
+      previousWeekRevenue: previousWeek[0]?.total || 0,
+      daily,
+      topProducts,
+      lowStock,
+      forecastProducts,
+      customerAnalytics: {
+        totalCustomers: customerTotals,
+        newCustomers30Days: await User.countDocuments({ createdAt: { $gte: customerStart } }),
+        repeatCustomers: customerRepeat[0]?.total || 0,
+        topCustomers
+      }
     });
+  } catch (error) {
+    console.error("Admin stats error:", error);
+    res.status(500).json({ error: "Статистик авахад алдаа гарлаа." });
   }
 });
 
-app.delete("/api/admin/coupons/:id", adminOnly, async (req, res) => {
-  await Coupon.findByIdAndDelete(req.params.id);
-  res.json({ ok: true });
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: "Серверийн алдаа." });
 });
 
-/* =========================
-   CLOUDINARY UPLOAD
-========================= */
+mongoose.connect(MONGODB_URI)
+  .then(async () => {
+    console.log("MongoDB connected successfully.");
 
-app.post("/api/admin/upload-signature", adminOnly, async (req, res) => {
-  if (!cloudinaryReady()) {
-    return res.status(503).json({
-      error: "Cloudinary тохируулаагүй. Зургийн шууд URL ашиглаж болно."
+    // Хуучин захиалгуудыг утасны дугаараар хэрэглэгчтэй холбох
+    const users = await User.find().select("_id phone").lean();
+    let linkedOrders = 0;
+
+    for (const user of users) {
+      const phone = String(user.phone || "").replace(/\\D/g, "");
+      if (phone.length < 8) continue;
+
+      const result = await Order.updateMany(
+        { userId: { $exists: false }, phone },
+        { $set: { userId: user._id } }
+      );
+
+      linkedOrders += result.modifiedCount || 0;
+    }
+
+    console.log(`Legacy orders linked: ${linkedOrders}`);
+
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`VELTRIX API running on port ${PORT}`);
     });
-  }
-
-  const timestamp = Math.round(Date.now() / 1000);
-  const params = { timestamp };
-
-  const signature = cloudinary.utils.api_sign_request(
-    params,
-    process.env.CLOUDINARY_API_SECRET
-  );
-
-  res.json({
-    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-    apiKey: process.env.CLOUDINARY_API_KEY,
-    timestamp,
-    signature
-  });
-});
-
-/* =========================
-   ADMIN PAGE
-========================= */
-
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "admin.html"));
-});
-
-/* =========================
-   START SERVER & DB CONNECTION
-========================= */
-
-const port = process.env.PORT || 3000;
-
-mongoose.connection.on("connected", () => {
-  console.log("VELTRIX database connected");
-});
-
-mongoose.connection.on("disconnected", () => {
-  console.warn("VELTRIX database disconnected!");
-});
-
-mongoose.connection.on("error", err => {
-  console.error("VELTRIX database connection error:", err.message);
-});
-
-async function startServerWithRetry(maxRetries = 5, delayMs = 3000) {
-  const uri = process.env.MONGODB_URI || "";
-
-  if (!uri) {
-    console.error("FATAL: MONGODB_URI environment variable is not defined!");
+  })
+  .catch((error) => {
+    console.error("MongoDB connection failed:", error.message);
     process.exit(1);
-  }
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      await mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 8000
-      });
-
-      app.listen(port, () => {
-        console.log("VELTRIX ULTIMATE running on " + port);
-      });
-      return;
-    } catch (err) {
-      console.error(`Database connection attempt ${attempt}/${maxRetries} failed: ${err.message}`);
-      if (attempt === maxRetries) {
-        console.error("FATAL: Could not connect to MongoDB after multiple attempts.");
-        process.exit(1);
-      }
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-    }
-  }
-}
-
-startServerWithRetry();
+  });

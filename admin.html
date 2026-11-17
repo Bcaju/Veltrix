@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>VELTRIX | Product Admin</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <a class="brand" href="index.html"><b>V</b>ELTRIX <small>ADMIN PANEL</small></a>
+    <p class="label">УДИРДЛАГА</p>
+    <a class="nav active" href="#dashboard">▦ Хянах самбар</a>
+    <a class="nav" href="#products">▣ Барааны бүртгэл</a>
+    <a class="nav" href="index.html">↗ Вебсайт руу буцах</a>
+    <div class="foot">VELTRIX ONLINE STORE<br><small>Барааны удирдлага</small></div>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <p class="label">VELTRIX / INVENTORY</p>
+        <h1>Барааны удирдлага</h1>
+      </div>
+      <button id="logout" hidden>Гарах ↗</button>
+    </header>
+
+    <section class="login" id="login">
+      <div class="mark">V</div>
+      <p class="label">SECURE ACCESS</p>
+      <h2>Админ нэвтрэх</h2>
+      <p class="muted">Нэвтрэх нууц үгээ оруулна уу.</p>
+      <form id="loginForm">
+        <label>Нууц үг
+          <input id="pin" type="password" placeholder="Нууц үг" required>
+        </label>
+        <button class="primary">НЭВТРЭХ →</button>
+        <p id="error" class="error"></p>
+      </form>
+    </section>
+
+    <section id="dashboard" hidden>
+      <div class="welcome">
+        <div>
+          <p class="label">OVERVIEW</p>
+          <h2>Барааны хяналтын самбар</h2>
+          <p class="muted">VELTRIX онлайн дэлгүүрийн бараагаа удирдана.</p>
+        </div>
+        <span class="live">● SYSTEM READY</span>
+      </div>
+
+      <section class="panel" id="salesStats" style="margin-bottom:28px">
+        <div class="panelhead">
+          <div>
+            <p class="label">BUSINESS ANALYTICS</p>
+            <h2>Борлуулалтын статистик</h2>
+          </div>
+          <button id="refreshStats" type="button">↻ Шинэчлэх</button>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><small>НИЙТ ЗАХИАЛГА</small><strong id="statOrders">0</strong></div>
+          <div class="stat"><small>ШИНЭ ЗАХИАЛГА</small><strong id="statNew">0</strong></div>
+          <div class="stat"><small>ДУУССАН ЗАХИАЛГА</small><strong id="statCompleted">0</strong></div>
+          <div class="stat"><small>БАТАЛГААЖСАН ОРЛОГО</small><strong id="statRevenue">0 ₮</strong></div>
+          <div class="stat"><small>БАРААНЫ НИЙТ ӨРТӨГ</small><strong id="statCost">0 ₮</strong></div>
+          <div class="stat"><small>НИЙТ АШИГ</small><strong id="statProfit">0 ₮</strong></div>
+        </div>
+
+        <p id="profitCoverage" class="muted" style="margin-top:12px">
+          Ашгийн тооцооны мэдээлэл ачаалж байна...
+        </p>
+
+        <div class="formgrid" style="margin-top:24px">
+          <div>
+            <h3>Сүүлийн 7 хоногийн орлого</h3>
+            <div id="salesChart" class="sales-chart">Мэдээлэл ачаалж байна...</div>
+          </div>
+          <div>
+            <h3>Шилдэг 5 бараа</h3>
+            <div id="topProducts">Мэдээлэл ачаалж байна...</div>
+          </div>
+        </div>
+
+        <div class="low-stock-section">
+          <h3>⚠️ Нөөц багатай бараа <small>(5-аас доошгүй үлдэгдэл)</small></h3>
+          <div id="lowStockProducts">Мэдээлэл ачаалж байна...</div>
+        </div>
+
+        <section class="ai-insights-section">
+          <div class="panelhead">
+            <div>
+              <p class="label">VELTRIX INTELLIGENCE</p>
+              <h3>🤖 AI Business Insights</h3>
+            </div>
+            <span class="live">SMART ANALYSIS</span>
+          </div>
+          <div id="aiBusinessInsights">
+            <p class="muted">Бизнесийн мэдээлэлд дүн шинжилгээ хийж байна...</p>
+          </div>
+        </section>
+
+        <section class="ai-insights-section" id="smartForecastSection">
+          <div class="panelhead">
+            <div>
+              <p class="label">VELTRIX INTELLIGENCE</p>
+              <h3>📦 Smart Forecast — Нөөцийн таамаг</h3>
+            </div>
+            <span class="live">30 DAY ANALYSIS</span>
+          </div>
+          <div id="smartForecast">
+            <p class="muted">Борлуулалтын мэдээлэл тооцоолж байна...</p>
+          </div>
+        </section>
+
+        <section class="ai-insights-section" id="trendAnalysisSection">
+          <div class="panelhead">
+            <div>
+              <p class="label">VELTRIX INTELLIGENCE</p>
+              <h3>📈 Trend Analysis — Борлуулалтын чиг хандлага</h3>
+            </div>
+            <span class="live">60 DAY COMPARISON</span>
+          </div>
+          <div id="trendAnalysis">
+            <p class="muted">Борлуулалтын чиг хандлага тооцоолж байна...</p>
+          </div>
+        </section>
+
+        <section class="ai-insights-section" id="customerAnalyticsSection">
+          <div class="panelhead">
+            <div>
+              <p class="label">VELTRIX CUSTOMER INTELLIGENCE</p>
+              <h3>👥 Customer Analytics — Хэрэглэгчийн статистик</h3>
+            </div>
+            <span class="live">CUSTOMER INSIGHTS</span>
+          </div>
+
+          <div class="customer-summary">
+            <div class="customer-summary-card">
+              <small>НИЙТ ХЭРЭГЛЭГЧ</small>
+              <strong id="customerTotal">0</strong>
+            </div>
+            <div class="customer-summary-card">
+              <small>ШИНЭ (30 ХОНОГ)</small>
+              <strong id="customerNew">0</strong>
+            </div>
+            <div class="customer-summary-card">
+              <small>ДАВТАН ХУДАЛДАН АВАЛТ</small>
+              <strong id="customerRepeat">0</strong>
+            </div>
+          </div>
+
+          <h4>🏆 Шилдэг 5 хэрэглэгч</h4>
+          <div id="topCustomers">
+            <p class="muted">Мэдээлэл ачаалж байна...</p>
+          </div>
+          <p class="muted">Зөвхөн бүртгэлтэй хэрэглэгчтэй холбогдсон дууссан захиалгыг тооцно. Утасны дугаар нууцлагдсан.</p>
+        </section>
+
+        <p id="statsMessage" class="muted"></p>
+      </section>
+
+
+<!-- VELTRIX AI BUSINESS CHAT -->
+<section class="panel" id="aiBusinessChat" style="margin-bottom:28px">
+  <div class="panelhead">
+    <div>
+      <p class="label">VELTRIX INTELLIGENCE</p>
+      <h2>🤖 AI Business Chat</h2>
+    </div>
+    <span class="live">BUSINESS ASSISTANT</span>
+  </div>
+
+  <div id="businessChatMessages" class="admin-chat-messages">
+    <div class="ai-insight-item info">
+      <strong>VELTRIX Assistant</strong>
+      <p>Сайн байна уу! Борлуулалт, ашиг, барааны нөөцийн талаар надаас асуугаарай.</p>
+    </div>
+  </div>
+
+  <div class="admin-chat-form">
+    <input
+      id="businessChatInput"
+      type="text"
+      maxlength="300"
+      placeholder="Жишээ: Нийт ашиг хэд вэ?"
+      autocomplete="off"
+    >
+    <button type="button" id="businessChatSend" class="primary">Асуух</button>
+  </div>
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+    <button type="button" class="business-question" data-question="Нийт ашиг хэд вэ?">Нийт ашиг</button>
+    <button type="button" class="business-question" data-question="Хамгийн их зарагдсан бараа юу вэ?">Шилдэг бараа</button>
+    <button type="button" class="business-question" data-question="Нөөц багатай бараануудыг харуул.">Бага нөөц</button>
+    <button type="button" class="business-question" data-question="Борлуулалт ямар байна?">Борлуулалт</button>
+  </div>
+
+  <p id="businessChatStatus" class="muted"></p>
+</section>
+<!-- VELTRIX AI BUSINESS CHAT END -->
+
+
+      <!-- VELTRIX ADMIN LIVE CHAT -->
+      <section class="panel" id="adminChat" style="margin-bottom:28px">
+        <div class="panelhead">
+          <div>
+            <p class="label">CUSTOMER SUPPORT</p>
+            <h2>💬 Хэрэглэгчийн чат</h2>
+          </div>
+          <div class="admin-chat-actions">
+            <button id="enableChatNotifications" type="button">🔔 Мэдэгдэл асаах</button>
+            <button id="refreshChats" type="button">↻ Шинэчлэх</button>
+          </div>
+        </div>
+
+        <div class="admin-chat-layout">
+          <div class="admin-chat-list">
+            <h3>Харилцан яриа <span id="chatUnreadTotal" class="chat-total-badge">0</span></h3>
+            <div id="chatConversations">
+              <p class="muted">Чатууд ачаалж байна...</p>
+            </div>
+          </div>
+
+          <div class="admin-chat-conversation">
+            <div id="chatSelectedUser" class="admin-chat-selected">
+              Хэрэглэгч сонгоно уу
+            </div>
+
+            <div id="adminChatMessages" class="admin-chat-messages">
+              <p class="muted">Харилцан яриа сонгоно уу.</p>
+            </div>
+
+            <form id="adminChatForm" class="admin-chat-form">
+              <input
+                id="adminChatInput"
+                type="text"
+                maxlength="1000"
+                placeholder="Хариу бичих..."
+                autocomplete="off"
+                required
+              >
+              <button type="submit" id="adminChatSend" class="primary">Илгээх</button>
+            </form>
+          </div>
+        </div>
+        <p id="adminChatMessage" class="muted"></p>
+      </section>
+      <!-- ADMIN LIVE CHAT END -->
+
+      <div class="stats">
+        <div class="stat"><small>НИЙТ БАРАА</small><strong id="total">0</strong></div>
+        <div class="stat"><small>ДУУСАХ ДӨХСӨН</small><strong id="low">0</strong></div>
+        <div class="stat"><small>БАРААГҮЙ</small><strong id="empty">0</strong></div>
+        <div class="stat"><small>НИЙТ ҮЛДЭГДЭЛ</small><strong id="stockTotal">0</strong></div>
+      </div>
+
+      <section class="panel" id="products">
+        <div class="panelhead">
+          <div>
+            <p class="label">PRODUCT DATABASE</p>
+            <h2>Барааны бүртгэл</h2>
+          </div>
+          <button id="new" class="primary">＋ Бараа нэмэх</button>
+        </div>
+
+        <div class="toolbar">
+          <input id="search" placeholder="Барааны нэрээр хайх...">
+          <select id="filter">
+            <option value="">Бүх ангилал</option>
+            <option value="Тоормос">Тоормос</option>
+            <option value="Араа">Араа</option>
+            <option value="Сэрээ">Сэрээ</option>
+            <option value="Дугуй">Дугуй</option>
+            <option value="Аксессуар">Аксессуар</option>
+            <option value="Бусад">Бусад</option>
+          </select>
+        </div>
+
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ЗУРАГ</th>
+                <th>БАРААНЫ НЭР</th>
+                <th>АНГИЛАЛ</th>
+                <th>ҮНЭ</th>
+                <th>ҮЛДЭГДЭЛ</th>
+                <th>ҮЙЛДЭЛ</th>
+              </tr>
+            </thead>
+            <tbody id="rows">
+              <tr><td colspan="6">Ачаалж байна...</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p id="message" class="muted"></p>
+
+      <section class="panel" id="orders" style="margin-top:28px">
+        <div class="panelhead">
+          <div>
+            <p class="label">ORDER MANAGEMENT</p>
+            <h2>Захиалгууд</h2>
+          </div>
+          <button id="refreshOrders" type="button">↻ Шинэчлэх</button>
+        </div>
+        <p id="ordersMessage" class="muted">Захиалгуудыг ачаалж байна...</p>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ЗАХИАЛГА</th>
+                <th>ХЭРЭГЛЭГЧ</th>
+                <th>АВАХ ТӨРӨЛ</th>
+                <th>БАРАА</th>
+                <th>НИЙТ</th>
+                <th>ТӨЛБӨР</th>
+                <th>ТӨЛӨВ</th>
+              </tr>
+            </thead>
+            <tbody id="orderRows">
+              <tr><td colspan="7">Ачаалж байна...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      </section>
+    </section>
+  </main>
+</div>
+
+<dialog id="modal">
+  <form id="productForm">
+    <div class="panelhead">
+      <h2 id="modalTitle">Шинэ бараа</h2>
+      <button type="button" id="close" class="close">×</button>
+    </div>
+
+    <label>Барааны нэр
+      <input name="name" maxlength="120" required placeholder="Жишээ: Shimano MT200">
+    </label>
+
+    <label>Ангилал
+      <select name="category" required>
+        <option value="">Ангилал сонгох</option>
+        <option>Тоормос</option>
+        <option>Араа</option>
+        <option>Сэрээ</option>
+        <option>Дугуй</option>
+        <option>Аксессуар</option>
+        <option>Бусад</option>
+      </select>
+    </label>
+
+    <div class="formgrid">
+      <label>Үнэ (₮)
+        <input name="price" type="number" min="0" step="1" required>
+      </label>
+      <label>Худалдан авсан өртөг (₮)
+        <input name="cost" type="number" min="0" step="1" required value="0">
+      </label>
+      <label>Үлдэгдэл
+        <input name="stock" type="number" min="0" step="1" required>
+      </label>
+    </div>
+
+    <label>Барааны зураг
+      <input
+        id="productImageFile"
+        name="imageFile"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+      >
+    </label>
+
+    <div id="productImagePreviewWrap" hidden>
+      <img
+        id="productImagePreview"
+        alt="Барааны зургийн урьдчилсан харагдац"
+        style="width:150px;height:120px;object-fit:contain;border-radius:12px;"
+      >
+    </div>
+    <small class="muted">JPEG, PNG, WEBP · 700KB хүртэл</small>
+
+    <label>Тайлбар
+      <textarea name="description" maxlength="1000" rows="4" placeholder="Барааны тайлбар..."></textarea>
+    </label>
+
+    <button class="primary" type="submit">ХАДГАЛАХ →</button>
+    <p id="formError" class="error"></p>
+  </form>
+</dialog>
+
+<script src="admin.js"></script>
+</body>
+</html>
