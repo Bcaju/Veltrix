@@ -48,6 +48,8 @@ app.get(`${ADMIN_PATH}/admin.js`, (req, res) => res.sendFile(path.join(__dirname
 app.get("/style.css", (req, res) => res.sendFile(path.join(__dirname, "style.css")));
 app.get("/script.js", (req, res) => res.sendFile(path.join(__dirname, "script.js")));
 app.get("/logo.svg", (req, res) => res.sendFile(path.join(__dirname, "logo.svg")));
+app.get("/veltrix-favicon.png", (req, res) => res.sendFile(path.join(__dirname, "veltrix-favicon.png")));
+app.get("/veltrix-favicon.ico", (req, res) => res.sendFile(path.join(__dirname, "veltrix-favicon.ico")));
 
 
 const loginLimiter = rateLimit({
