@@ -1054,3 +1054,150 @@ dialog .panelhead h2 { margin: 0; }
   }
 }
 
+
+/* VELTRIX ADMIN — MOBILE RESPONSIVE FIX */
+@media (max-width: 850px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  aside {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  aside .label,
+  .foot {
+    display: none;
+  }
+
+  .brand {
+    flex: 0 0 100%;
+    font-size: 27px;
+    margin-bottom: 4px;
+  }
+
+  .nav {
+    display: inline-flex;
+    flex: 1 1 auto;
+    justify-content: center;
+    align-items: center;
+    min-width: 0;
+    margin: 0;
+    padding: 10px 8px;
+    font-size: 12px;
+    text-align: center;
+  }
+
+  main {
+    width: 100%;
+    min-width: 0;
+    padding: 18px;
+  }
+
+  header,
+  .panelhead {
+    flex-wrap: wrap;
+  }
+
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .formgrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .panel,
+  .login,
+  #dashboard,
+  .welcome {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .tablewrap,
+  .customer-table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  input,
+  select,
+  textarea {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  main {
+    padding: 12px;
+  }
+
+  h1 {
+    font-size: 26px;
+    overflow-wrap: anywhere;
+  }
+
+  h2 {
+    font-size: 20px;
+  }
+
+  .welcome {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .panel {
+    padding: 12px;
+  }
+
+  .panelhead {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .panelhead button {
+    max-width: 100%;
+  }
+
+  .stats {
+    gap: 8px;
+  }
+
+  .stat {
+    min-width: 0;
+    padding: 12px;
+  }
+
+  .stat strong {
+    font-size: 20px;
+    overflow-wrap: anywhere;
+  }
+
+  .toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .formgrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .login {
+    width: 100%;
+    padding: 20px 14px;
+  }
+
+  button {
+    max-width: 100%;
+  }
+}
