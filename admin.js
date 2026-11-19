@@ -273,8 +273,8 @@ productImageFile.addEventListener("change", async () => {
     return;
   }
 
-  if (file.size > 700 * 1024) {
-    $("formError").textContent = "Зургийн хэмжээ 700KB-аас бага байх ёстой.";
+  if (file.size > 10 * 1024 * 1024) {
+    $("formError").textContent = "Зургийн хэмжээ 10MB-аас бага байх ёстой.";
     productImageFile.value = "";
     return;
   }

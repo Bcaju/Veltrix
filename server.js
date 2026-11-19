@@ -29,7 +29,7 @@ if (!ADMIN_PASSWORD || !MONGODB_URI) {
 }
 
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "16mb" }));
 app.use(cookieParser());
 
 // Зөвхөн вебсайтад шаардлагатай файлуудыг нээнэ.
