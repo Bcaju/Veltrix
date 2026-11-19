@@ -380,7 +380,7 @@ app.get("/api/health", (req, res) => {
 app.post("/api/auth/register", loginLimiter, async (req, res) => {
   try {
     const name = String(req.body?.name || "").trim();
-    const phone = String(req.body?.phone || "").replace(/\\D/g, "");
+    const phone = String(req.body?.phone || "").replace(/\D/g, "");
     const password = req.body?.password;
 
     if (name.length < 2 || name.length > 100) {
@@ -429,7 +429,7 @@ app.post("/api/auth/register", loginLimiter, async (req, res) => {
 
 app.post("/api/auth/login", loginLimiter, async (req, res) => {
   try {
-    const phone = String(req.body?.phone || "").replace(/\\D/g, "");
+    const phone = String(req.body?.phone || "").replace(/\D/g, "");
     const password = req.body?.password;
 
     if (phone.length < 8 || phone.length > 15 || typeof password !== "string") {
@@ -804,8 +804,10 @@ app.post("/api/orders/track", requireUser, async (req, res) => {
       return res.status(400).json({ error: "Захиалгын дугаар болон утсаа зөв оруулна уу." });
     }
 
-    const order = await Order.findOne({ orderNumber })
-      .select("orderNumber phone status createdAt items.name items.quantity total deliveryType")
+    const order = await Order.findOne({
+      orderNumber,
+      userId: req.userId
+    }).select("orderNumber phone status createdAt items.name items.quantity total deliveryType")
       .lean();
 
     if (!order || String(order.phone).replace(/\D/g, "") !== phone) {
@@ -1728,7 +1730,7 @@ mongoose.connect(MONGODB_URI)
     let linkedOrders = 0;
 
     for (const user of users) {
-      const phone = String(user.phone || "").replace(/\\D/g, "");
+      const phone = String(user.phone || "").replace(/\D/g, "");
       if (phone.length < 8) continue;
 
       const result = await Order.updateMany(
