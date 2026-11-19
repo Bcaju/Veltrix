@@ -155,6 +155,7 @@ async function submitAuth(e) {
     }
 
     currentUser = data.user;
+    updateHeaderAuth();
     closeAuth();
 
     const action = pendingAuthAction;
