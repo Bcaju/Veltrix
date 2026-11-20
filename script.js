@@ -196,42 +196,6 @@ function escapeHTML(value) {
   }[c]));
 }
 
-function renderReviews() {
-  const list = readStore('veltrixReviews');
-  const box = document.getElementById('reviewList');
-
-  if (!list.length) {
-    box.innerHTML = '<p class="muted">Одоогоор сэтгэгдэл алга байна.</p>';
-    return;
-  }
-
-  box.innerHTML = list.slice().reverse().map(r => `
-    <article class="review-card">
-      <div class="stars">${'★'.repeat(r.rating)}${'☆'.repeat(5-r.rating)}</div>
-      <h3>${escapeHTML(r.name)}</h3>
-      <p>${escapeHTML(r.text)}</p>
-    </article>
-  `).join('');
-}
-
-document.getElementById('reviewForm').addEventListener('submit', e => {
-  e.preventDefault();
-
-  const list = readStore('veltrixReviews');
-  list.push({
-    name: document.getElementById('reviewName').value.trim(),
-    rating: Number(document.getElementById('reviewRating').value),
-    text: document.getElementById('reviewText').value.trim()
-  });
-
-  writeStore('veltrixReviews', list);
-  e.target.reset();
-  renderReviews();
-  alert('Сэтгэгдэл хадгалагдлаа. Баярлалаа!');
-});
-
-renderReviews();
-
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeAuth();
 });

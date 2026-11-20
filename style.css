@@ -488,54 +488,6 @@ section {
 }
 
 
-#reviews {
-    background: #0b100c;
-    padding: 70px 0;
-}
-
-#reviews .review-list,
-#reviews #reviewList {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 16px;
-    margin-top: 28px;
-}
-
-#reviews .review-card {
-    padding: 22px;
-    background: #121913;
-    border: 1px solid #303a31;
-    border-radius: 16px;
-    color: var(--white);
-}
-
-#reviews .review-card p {
-    color: #d0d8cf;
-}
-
-#reviews form {
-    display: grid;
-    gap: 14px;
-}
-
-#reviews input,
-#reviews select,
-#reviews textarea {
-    width: 100%;
-    padding: 12px;
-    border: 1px solid #303a31;
-    border-radius: 8px;
-    background: #121913;
-    color: var(--white);
-}
-
-#reviews button {
-    padding: 12px 20px;
-    border: 0;
-    border-radius: 8px;
-    cursor: pointer;
-}
-
 /* =====================================
    PHOENIX ONLINE PRODUCT SHOP
 ===================================== */
