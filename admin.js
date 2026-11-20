@@ -567,7 +567,7 @@ async function loadStats() {
 
     const weeklyRevenue = days.reduce((sum, day) => sum + day.total, 0);
 
-    // VELTRIX SMART FORECAST
+    // PHOENIX SMART FORECAST
     const forecastContainer = $("smartForecast");
     const forecastProducts = data.forecastProducts || [];
 
@@ -626,7 +626,7 @@ async function loadStats() {
     }
 
 
-    // VELTRIX TREND ANALYSIS
+    // PHOENIX TREND ANALYSIS
     const trendContainer = $("trendAnalysis");
     const trendProducts = data.forecastProducts || [];
 
@@ -744,7 +744,7 @@ async function loadStats() {
       `;
     }
 
-    // VELTRIX CUSTOMER ANALYTICS
+    // PHOENIX CUSTOMER ANALYTICS
     const customerData = data.customerAnalytics || {};
 
     $("customerTotal").textContent =
@@ -785,7 +785,7 @@ async function loadStats() {
       `
       : '<p class="muted">Одоогоор бүртгэлтэй хэрэглэгчийн дууссан захиалга алга.</p>';
 
-    // VELTRIX SMART BUSINESS INSIGHTS
+    // PHOENIX SMART BUSINESS INSIGHTS
     const insights = [];
     const activeDays = days.filter(day => day.total > 0).length;
     const bestProduct = top[0];
@@ -868,7 +868,7 @@ async function loadStats() {
 
 $("refreshStats")?.addEventListener("click", loadStats);
 
-/* ===== VELTRIX ADMIN LIVE CHAT ===== */
+/* ===== PHOENIX ADMIN LIVE CHAT ===== */
 
 let selectedChatUserId = null;
 let selectedChatUserName = "";
@@ -882,7 +882,7 @@ function notifyNewChatMessage(chat) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
 
   const notification = new Notification(
-    "VELTRIX — Шинэ мессеж",
+    "PHOENIX — Шинэ мессеж",
     {
       body: (chat.userName || "Хэрэглэгч") + ": " +
         (chat.lastMessage || "Шинэ мессеж ирлээ.").slice(0, 110),
@@ -1134,7 +1134,7 @@ if ("Notification" in window && Notification.permission === "granted") {
 $("adminChatForm")?.addEventListener("submit", sendAdminChatMessage);
 
 
-/* ===== VELTRIX BUSINESS CHAT ===== */
+/* ===== PHOENIX BUSINESS CHAT ===== */
 
 function addBusinessChatMessage(sender, message) {
   const container = $("businessChatMessages");
@@ -1145,7 +1145,7 @@ function addBusinessChatMessage(sender, message) {
     (sender === "admin" ? "info" : "success");
 
   const title = document.createElement("strong");
-  title.textContent = sender === "admin" ? "Та" : "VELTRIX Assistant";
+  title.textContent = sender === "admin" ? "Та" : "PHOENIX Assistant";
 
   const content = document.createElement("p");
   content.style.whiteSpace = "pre-wrap";
@@ -1211,7 +1211,7 @@ document.querySelectorAll(".business-question").forEach(button => {
   });
 });
 
-/* ===== VELTRIX BUSINESS CHAT END ===== */
+/* ===== PHOENIX BUSINESS CHAT END ===== */
 
 /* ===== ADMIN LIVE CHAT END ===== */
 

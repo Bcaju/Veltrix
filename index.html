@@ -4,10 +4,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="VELTRIX — Унадаг дугуйн сэлбэг, аксессуарын онлайн дэлгүүр.">
-  <title>VELTRIX | Bicycle Store</title>
-  <link rel="icon" type="image/png" href="/veltrix-favicon.png">
-  <link rel="icon" type="image/x-icon" href="/veltrix-favicon.ico">
+  <meta name="description" content="PHOENIX BIKE SERVICE — Унадаг дугуйн засвар, сэлбэг, аксессуар.">
+  <title>PHOENIX | Bike Service</title>
+  <link rel="icon" type="image/svg+xml" href="/phoenix-logo.svg">
   <link rel="stylesheet" href="style.css">
 </head>
 
@@ -15,7 +14,10 @@
 
   <header>
     <div class="wrap nav">
-      <a class="logo" href="#home">VELTRI<span>X</span><small>ONLINE STORE</small></a>
+      <a class="logo phoenix-brand" href="#home">
+        <img src="/phoenix-logo.svg" alt="PHOENIX logo">
+        <span class="phoenix-brand-text">PHOENIX<small>BIKE SERVICE</small></span>
+      </a>
       <nav>
         <a href="#home">Нүүр</a>
         <a href="#shop">Дэлгүүр</a>
@@ -49,7 +51,7 @@
         <div class="hero-copy">
           <div class="eyebrow">RIDE MORE. WORRY LESS.</div>
           <h1>ДУГУЙНХАА<br><span>ХЭРЭГЦЭЭГ НЭГ ДОР!</span></h1>
-          <p>Дугуйн чанартай сэлбэг, хэрэгтэй аксессуараа VELTRIX-ээс сонгоорой.</p>
+          <p>Дугуйн чанартай сэлбэг, хэрэгтэй аксессуараа PHOENIX-ээс сонгоорой.</p>
           <div class="actions">
             <a class="btn" href="#shop">▦ Бараа үзэх　→</a>
             <a class="btn alt" href="tel:88960776">☎ 8896-0776</a>
@@ -60,9 +62,9 @@
 
     <section class="shop-section" id="shop">
       <div class="wrap">
-        <div class="section-kicker">VELTRIX ONLINE STORE</div>
+        <div class="section-kicker">PHOENIX ONLINE STORE</div>
         <h2 class="section-title">Дугуйн сэлбэг, аксессуар</h2>
-        <p class="muted">VELTRIX дэлгүүрийн бараанууд. Үнэ болон үлдэгдлийг шинэчилсэн мэдээллээр харуулна.</p>
+        <p class="muted">PHOENIX дэлгүүрийн бараанууд. Үнэ болон үлдэгдлийг шинэчилсэн мэдээллээр харуулна.</p>
 
         <div class="shop-toolbar">
           <input id="shopSearch" type="search" placeholder="Барааны нэрээр хайх...">
@@ -142,9 +144,9 @@
     <section id="about">
       <div class="wrap about-grid">
         <div>
-          <div class="section-kicker">ABOUT VELTRIX</div>
+          <div class="section-kicker">ABOUT PHOENIX</div>
           <h2 class="section-title">Бидний тухай</h2>
-          <p class="muted">VELTRIX бол дугуйн сэлбэг, аксессуарын онлайн дэлгүүр. Бид таны дугуйн хэрэгцээнд тохирсон
+          <p class="muted">PHOENIX бол дугуйн сэлбэг, аксессуарын онлайн дэлгүүр. Бид таны дугуйн хэрэгцээнд тохирсон
             бүтээгдэхүүнийг санал болгоно.</p>
           <div class="promise">
             <div>Чанартай сэлбэг, аксессуар</div>
@@ -152,7 +154,7 @@
             <div>Дугуйн хэрэглээг илүү хялбар болгоно</div>
           </div>
         </div>
-        <div class="about-photo" role="img" aria-label="VELTRIX дугуйн дэлгүүр"></div>
+        <div class="about-photo" role="img" aria-label="PHOENIX дугуйн дэлгүүр"></div>
       </div>
     </section>
 
@@ -160,7 +162,7 @@
       <div class="wrap contact-grid">
         <div>
           <div class="section-kicker">CONTACT US</div>
-          <h2 class="section-title">VELTRIX-тэй холбогдоорой</h2>
+          <h2 class="section-title">PHOENIX-тэй холбогдоорой</h2>
           <p class="muted">Бараа бүтээгдэхүүн болон захиалгын талаар утсаар холбогдоорой.</p>
           <a class="btn" href="tel:88960776">☎ Холбогдох　→</a>
         </div>
@@ -180,7 +182,7 @@
   <div class="modal-backdrop" id="authBackdrop" onclick="backdropClose(event)">
     <section class="auth-modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
       <button class="modal-close" type="button" aria-label="Хаах" onclick="closeAuth()">×</button>
-      <div class="section-kicker">VELTRIX MEMBER</div>
+      <div class="section-kicker">PHOENIX MEMBER</div>
       <h2 id="authTitle">Нэвтрэх</h2>
       <p id="authDescription">Бүртгэлтэй бол утасны дугаар, нууц үгээ оруулна уу.</p>
       <form class="auth-form" id="authForm" onsubmit="submitAuth(event)">
@@ -203,7 +205,7 @@
   <div class="checkout-backdrop" id="checkoutBackdrop" hidden>
     <section class="checkout-modal" role="dialog" aria-modal="true">
       <button type="button" id="closeCheckout" class="modal-close">×</button>
-      <div class="section-kicker">VELTRIX ORDER</div>
+      <div class="section-kicker">PHOENIX ORDER</div>
       <h2>Захиалга баталгаажуулах</h2>
 
       <form id="checkoutForm">
@@ -247,7 +249,7 @@
   <div class="modal-backdrop" id="accountBackdrop">
     <section class="auth-modal account-modal" role="dialog" aria-modal="true">
       <button class="modal-close" type="button" onclick="closeAccount()">×</button>
-      <div class="section-kicker">VELTRIX MEMBER</div>
+      <div class="section-kicker">PHOENIX MEMBER</div>
       <h2>Миний бүртгэл</h2>
 
       <div class="profile-photo-area">
@@ -303,7 +305,7 @@
   <div class="modal-backdrop" id="ordersBackdrop">
     <section class="auth-modal orders-modal" role="dialog" aria-modal="true">
       <button class="modal-close" type="button" onclick="closeAccountOrders()">×</button>
-      <div class="section-kicker">VELTRIX MEMBER</div>
+      <div class="section-kicker">PHOENIX MEMBER</div>
       <h2>Миний захиалгууд</h2>
       <div id="accountOrders">
         <p class="muted">Захиалгууд хараахан ачаалагдаагүй байна.</p>
@@ -313,13 +315,13 @@
 
   <footer>
     <div class="wrap foot">
-      <span>© 2026 VELTRIX Online Store</span>
-      <span>Таны дугуйн хэрэгцээ — VELTRIX дээр!</span>
+      <span>© 2026 PHOENIX Online Store</span>
+      <span>Таны дугуйн хэрэгцээ — PHOENIX дээр!</span>
     </div>
   </footer>
 
 
-  <!-- VELTRIX LIVE CHAT -->
+  <!-- PHOENIX LIVE CHAT -->
   <div class="chat-widget" id="chatWidget">
     <button class="chat-toggle" id="chatToggle" type="button" onclick="toggleChat()">
       💬 Чат
@@ -328,7 +330,7 @@
     <section class="chat-panel" id="chatPanel" hidden>
       <header class="chat-header">
         <div>
-          <strong>VELTRIX тусламж</strong>
+          <strong>PHOENIX тусламж</strong>
           <small>Бид танд туслахад бэлэн байна</small>
         </div>
         <button type="button" class="chat-close" onclick="toggleChat()">×</button>
@@ -349,7 +351,7 @@
       </form>
     </section>
   </div>
-  <!-- VELTRIX LIVE CHAT END -->
+  <!-- PHOENIX LIVE CHAT END -->
 
   <script src="script.js"></script>
 </body>

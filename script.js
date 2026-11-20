@@ -10,7 +10,7 @@ function openAuth(mode) {
   document.getElementById('authBackdrop').classList.add('show');
   document.getElementById('authTitle').textContent = reg ? 'Бүртгүүлэх' : 'Нэвтрэх';
   document.getElementById('authDescription').textContent = reg
-    ? 'VELTRIX-ийн хэрэглэгчийн бүртгэл үүсгэх мэдээллээ оруулна уу.'
+    ? 'PHOENIX-ийн хэрэглэгчийн бүртгэл үүсгэх мэдээллээ оруулна уу.'
     : 'Бүртгэлтэй бол утасны дугаар, нууц үгээ оруулна уу.';
 
   document.getElementById('nameField').hidden = !reg;
@@ -237,7 +237,7 @@ document.addEventListener('keydown', e => {
 });
 
 // =====================================
-// VELTRIX PUBLIC PRODUCT SHOP
+// PHOENIX PUBLIC PRODUCT SHOP
 // =====================================
 
 let shopProducts = [];
@@ -298,7 +298,7 @@ function renderShopProducts() {
         </div>
         <div class="shop-card-body">
           <h3>${escapeHTML(product.name)}</h3>
-          <p class="shop-description">${escapeHTML(product.description || "VELTRIX дугуйн сэлбэг, аксессуар.")}</p>
+          <p class="shop-description">${escapeHTML(product.description || "PHOENIX дугуйн сэлбэг, аксессуар.")}</p>
           <div class="shop-card-bottom">
             <strong class="shop-price">${shopMoney(product.price)}</strong>
             <span class="${available ? "shop-available" : "shop-unavailable"}">
@@ -341,7 +341,7 @@ async function loadShopProducts() {
     renderShopProducts();
     syncCartWithStock();
   } catch (error) {
-    console.error("VELTRIX shop:", error);
+    console.error("PHOENIX shop:", error);
     count.textContent = "Бараа ачаалж чадсангүй.";
     container.innerHTML = `
       <div class="shop-empty">
@@ -373,7 +373,7 @@ setInterval(() => {
   if (!document.hidden) loadShopProducts();
 }, 15000);
 
-// ===== VELTRIX SHOPPING CART =====
+// ===== PHOENIX SHOPPING CART =====
 let cart = JSON.parse(localStorage.getItem("veltrixCart") || "[]");
 
 function saveCart() {
@@ -570,7 +570,7 @@ document.getElementById("cartItems")?.addEventListener("click", () => {
   renderCart();
 });
 
-// ===== VELTRIX CHECKOUT SYSTEM =====
+// ===== PHOENIX CHECKOUT SYSTEM =====
 const checkoutBackdrop = document.getElementById("checkoutBackdrop");
 const checkoutForm = document.getElementById("checkoutForm");
 const checkoutButton = document.getElementById("checkoutButton");
@@ -663,7 +663,7 @@ checkoutForm?.addEventListener("submit", async event => {
 
 updateDeliveryField();
 
-// ===== VELTRIX ORDER TRACKING =====
+// ===== PHOENIX ORDER TRACKING =====
 const orderTrackingForm = document.getElementById("orderTrackingForm");
 
 orderTrackingForm?.addEventListener("submit", async event => {
@@ -1126,7 +1126,7 @@ async function saveAccountPassword(event) {
   }
 }
 
-/* ===== VELTRIX LIVE CHAT ===== */
+/* ===== PHOENIX LIVE CHAT ===== */
 
 let chatPollingTimer = null;
 let chatLoading = false;
@@ -1229,7 +1229,7 @@ function renderChatMessages(messages) {
   if (!messages.length) {
     const empty = document.createElement("p");
     empty.className = "muted";
-    empty.textContent = "Сайн байна уу! VELTRIX-тэй холбогдсонд баярлалаа.";
+    empty.textContent = "Сайн байна уу! PHOENIX-тэй холбогдсонд баярлалаа.";
     container.appendChild(empty);
     return;
   }

@@ -1,13 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
 
 :root {
-  --bg: #080b09;
+  --bg: #080808;
   --panel: #111713;
   --panel2: #171f19;
   --line: #29352b;
-  --lime: #baff00;
-  --text: #f1f5ef;
-  --muted: #8b978b;
+  --lime: #B8FF00;
+  --text: #FFFFFF;
+  --muted: #C0C0C0;
   --red: #ff6565;
 }
 
@@ -347,7 +347,7 @@ dialog .panelhead h2 { margin: 0; }
   .formgrid { grid-template-columns: 1fr; gap: 0; }
 }
 
-/* VELTRIX SALES ANALYTICS */
+/* PHOENIX SALES ANALYTICS */
 .sales-chart {
   min-height: 220px;
   padding: 18px 8px 8px;
@@ -468,7 +468,7 @@ dialog .panelhead h2 { margin: 0; }
   }
 }
 
-/* ===== VELTRIX ADMIN LIVE CHAT ===== */
+/* ===== PHOENIX ADMIN LIVE CHAT ===== */
 
 .admin-chat-layout {
   display: grid;
@@ -741,7 +741,7 @@ dialog .panelhead h2 { margin: 0; }
   font-size: 12px;
 }
 
-/* VELTRIX AI BUSINESS INSIGHTS */
+/* PHOENIX AI BUSINESS INSIGHTS */
 .ai-insights-section {
   margin-top: 24px;
   padding: 20px;
@@ -799,7 +799,7 @@ dialog .panelhead h2 { margin: 0; }
   }
 }
 
-/* VELTRIX SMART FORECAST */
+/* PHOENIX SMART FORECAST */
 #smartForecast {
   margin-top: 16px;
 }
@@ -851,7 +851,7 @@ dialog .panelhead h2 { margin: 0; }
   }
 }
 
-/* VELTRIX TREND ANALYSIS */
+/* PHOENIX TREND ANALYSIS */
 #trendAnalysis {
   margin-top: 16px;
 }
@@ -983,7 +983,7 @@ dialog .panelhead h2 { margin: 0; }
   }
 }
 
-/* VELTRIX CUSTOMER ANALYTICS */
+/* PHOENIX CUSTOMER ANALYTICS */
 .customer-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1055,7 +1055,7 @@ dialog .panelhead h2 { margin: 0; }
 }
 
 
-/* VELTRIX ADMIN — MOBILE RESPONSIVE FIX */
+/* PHOENIX ADMIN — MOBILE RESPONSIVE FIX */
 @media (max-width: 850px) {
   .shell {
     grid-template-columns: minmax(0, 1fr);
@@ -1200,4 +1200,32 @@ dialog .panelhead h2 { margin: 0; }
   button {
     max-width: 100%;
   }
+}
+
+
+/* PHOENIX ADMIN BRAND */
+.phoenix-admin-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+}
+
+.phoenix-admin-brand img {
+    width: 42px;
+    height: 42px;
+    object-fit: contain;
+}
+
+.phoenix-admin-brand span {
+    color: #fff;
+    font-weight: 900;
+}
+
+.phoenix-admin-brand small {
+    display: block;
+    color: #B8FF00;
+    font-size: 9px;
+    letter-spacing: 2px;
+    margin-top: 4px;
 }

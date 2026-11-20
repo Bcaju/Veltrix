@@ -1,9 +1,9 @@
 :root {
-    --bg: #080b09;
+    --bg: #080808;
     --panel: #111713;
-    --lime: #baff00;
-    --white: #f6f8f4;
-    --muted: #aab4aa;
+    --lime: #B8FF00;
+    --white: #FFFFFF;
+    --muted: #C0C0C0;
     --line: #303a31
 }
 
@@ -537,7 +537,7 @@ section {
 }
 
 /* =====================================
-   VELTRIX ONLINE PRODUCT SHOP
+   PHOENIX ONLINE PRODUCT SHOP
 ===================================== */
 
 .shop-section {
@@ -702,7 +702,7 @@ section {
   .shop-image-wrap { height: 210px; }
 }
 
-/* ===== VELTRIX SHOPPING CART ===== */
+/* ===== PHOENIX SHOPPING CART ===== */
 .cart-panel {
   margin: 28px 0;
   padding: 24px;
@@ -853,7 +853,7 @@ section {
   }
 }
 
-/* ===== VELTRIX CHECKOUT ===== */
+/* ===== PHOENIX CHECKOUT ===== */
 .checkout-backdrop {
   position: fixed;
   inset: 0;
@@ -954,7 +954,7 @@ section {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ===== VELTRIX ORDER TRACKING ===== */
+/* ===== PHOENIX ORDER TRACKING ===== */
 .order-tracking-section {
   padding: 75px 0;
   background: #0b100c;
@@ -1041,7 +1041,7 @@ section {
 }
 
 
-/* VELTRIX ACCOUNT DROPDOWN */
+/* PHOENIX ACCOUNT DROPDOWN */
 .user-menu {
   position: relative;
 }
@@ -1212,7 +1212,7 @@ section {
   width: 100%;
 }
 
-/* VELTRIX Header Profile Avatar */
+/* PHOENIX Header Profile Avatar */
 .header-profile-btn {
   width: 44px;
   height: 44px;
@@ -1251,7 +1251,7 @@ section {
 }
 
 
-/* VELTRIX ORDER TRACKING TIMELINE */
+/* PHOENIX ORDER TRACKING TIMELINE */
 .order-order-status {
   font-weight: 700;
   color: var(--lime);
@@ -1342,7 +1342,7 @@ section {
   }
 }
 
-/* VELTRIX ORDER STATUS HISTORY */
+/* PHOENIX ORDER STATUS HISTORY */
 .order-history {
   margin: 18px 0;
   padding: 14px;
@@ -1393,7 +1393,7 @@ section {
   }
 }
 
-/* ===== VELTRIX LIVE CHAT ===== */
+/* ===== PHOENIX LIVE CHAT ===== */
 
 .chat-widget {
   position: fixed;
@@ -1551,3 +1551,38 @@ section {
 
 /* ===== LIVE CHAT END ===== */
 
+
+
+/* PHOENIX BRAND */
+.phoenix-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    flex-shrink: 0;
+}
+
+.phoenix-brand img {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+}
+
+.phoenix-brand-text {
+    color: #fff;
+    font-size: 25px;
+    font-weight: 1000;
+    font-style: italic;
+    letter-spacing: -1px;
+    line-height: 1;
+}
+
+.phoenix-brand-text small {
+    display: block;
+    color: #B8FF00;
+    font-size: 8px;
+    font-weight: 700;
+    font-style: normal;
+    letter-spacing: 3px;
+    margin-top: 5px;
+}

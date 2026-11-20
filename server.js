@@ -216,7 +216,7 @@ function requireUser(req, res, next) {
 }
 
 
-// ===== VELTRIX LIVE CHAT API =====
+// ===== PHOENIX LIVE CHAT API =====
 
 // Хэрэглэгч өөрийн мессежүүдийг авах
 app.get("/api/chat/messages", requireUser, async (req, res) => {
@@ -1247,7 +1247,7 @@ app.delete("/api/repairs/:id", requireAdmin, async (req, res) => {
 
 // Админ статистик
 
-// VELTRIX AI BUSINESS CHAT API
+// PHOENIX AI BUSINESS CHAT API
 app.post("/api/admin/business-chat", requireAdmin, async (req, res) => {
   try {
     const question = String(req.body.question || "").trim().toLowerCase();
@@ -1349,7 +1349,7 @@ app.post("/api/admin/business-chat", requireAdmin, async (req, res) => {
 
     if (question.includes("ашиг") || question.includes("өртөг")) {
       answer =
-        `📊 VELTRIX ашгийн мэдээлэл:\n` +
+        `📊 PHOENIX ашгийн мэдээлэл:\n` +
         `Нийт ашиг: ${money(profit.profit)}\n` +
         `Бүртгэгдсэн өртөг: ${money(profit.cost)}\n` +
         `Өртөг бүрэн бүртгэгдсэн захиалга: ${profit.orders || 0}\n\n` +
@@ -1405,7 +1405,7 @@ app.post("/api/admin/business-chat", requireAdmin, async (req, res) => {
     });
   }
 });
-// VELTRIX AI BUSINESS CHAT API END
+// PHOENIX AI BUSINESS CHAT API END
 
 app.get("/api/admin/stats", requireAdmin, async (req, res) => {
   try {
@@ -1744,7 +1744,7 @@ mongoose.connect(MONGODB_URI)
     console.log(`Legacy orders linked: ${linkedOrders}`);
 
     app.listen(PORT, "0.0.0.0", () => {
-      console.log(`VELTRIX API running on port ${PORT}`);
+      console.log(`PHOENIX API running on port ${PORT}`);
     });
   })
   .catch((error) => {
