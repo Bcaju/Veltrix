@@ -1545,3 +1545,60 @@ section {
     letter-spacing: 3px;
     margin-top: 5px;
 }
+
+/* PHOENIX MOBILE POLISH */
+@media (max-width: 480px) {
+  .wrap {
+    width: calc(100% - 28px);
+  }
+
+  header {
+    height: 68px;
+  }
+
+  .nav {
+    gap: 8px;
+  }
+
+  .phoenix-brand {
+    gap: 6px;
+  }
+
+  .phoenix-brand img {
+    width: 38px;
+    height: 38px;
+  }
+
+  .phoenix-brand-text {
+    font-size: 20px;
+  }
+
+  .phone {
+    padding: 10px 12px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .hero {
+    min-height: 480px;
+  }
+
+  .hero-copy {
+    padding: 45px 0 60px;
+  }
+
+  h1 {
+    font-size: clamp(32px, 10vw, 44px);
+    line-height: 1.05;
+    overflow-wrap: anywhere;
+  }
+
+  section {
+    padding: 44px 0;
+  }
+
+  .chat-widget {
+    right: 12px;
+    bottom: 80px;
+  }
+}
