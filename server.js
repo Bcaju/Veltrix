@@ -49,6 +49,10 @@ app.get("/style.css", (req, res) => res.sendFile(path.join(__dirname, "style.css
 app.get("/script.js", (req, res) => res.sendFile(path.join(__dirname, "script.js")));
 app.get("/logo.svg", (req, res) => res.sendFile(path.join(__dirname, "logo.svg")));
 app.get("/phoenix-logo.svg", (req, res) => res.sendFile(path.join(__dirname, "phoenix-logo.svg")));
+app.get("/phoenix-mark.png", (req, res) => res.sendFile(path.join(__dirname, "phoenix-mark.png")));
+app.get("/phoenix-favicon.png", (req, res) => res.sendFile(path.join(__dirname, "phoenix-favicon.png")));
+app.get("/phoenix-full-logo.png", (req, res) => res.sendFile(path.join(__dirname, "phoenix-full-logo.png")));
+
 app.get("/veltrix-favicon.png", (req, res) => res.sendFile(path.join(__dirname, "veltrix-favicon.png")));
 app.get("/veltrix-favicon.ico", (req, res) => res.sendFile(path.join(__dirname, "veltrix-favicon.ico")));
 
