@@ -283,7 +283,7 @@ function renderShopProducts() {
   container.innerHTML = filtered.map(product => {
     const stock = Number(product.stock || 0);
     const image = String(product.image || "");
-    const safeImage = /^https?:\/\//i.test(image) ? escapeHTML(image) : "";
+    const safeImage = /^(https?:\/\/|data:image\/(jpeg|png|webp);base64,)/i.test(image) ? escapeHTML(image) : "";
     const available = stock > 0;
 
     return `
