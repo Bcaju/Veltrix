@@ -185,7 +185,7 @@
       <p id="authDescription">Бүртгэлтэй бол утасны дугаар, нууц үгээ оруулна уу.</p>
       <form class="auth-form" id="authForm" onsubmit="submitAuth(event)">
         <label>Утасны дугаар<input id="authPhone" type="tel" placeholder="Жишээ: 99112233" required
-            pattern="(?:[0-9]|\+|\(|\)| |\-){8,16}"></label>
+            pattern="[0-9+\x28\x29 \x2D]{8,16}"></label>
         <label id="nameField" hidden>Нэр<input id="authName" type="text" placeholder="Таны нэр"></label>
         <label>Нууц үг<input id="authPassword" type="password" placeholder="Нууц үгээ оруулна уу" minlength="6"
             required></label>
@@ -212,7 +212,7 @@
         </label>
 
         <label>Утасны дугаар
-          <input id="orderPhone" type="tel" required pattern="(?:[0-9]|\+|\(|\)| |\-){8,20}" placeholder="88960776">
+          <input id="orderPhone" type="tel" required pattern="[0-9+\x28\x29 \x2D]{8,20}" placeholder="88960776">
         </label>
 
         <label>Бараагаа хэрхэн авах вэ?
@@ -271,7 +271,7 @@
         </label>
 
         <label>Утасны дугаар
-          <input id="accountPhone" type="tel" minlength="8" maxlength="15" pattern="(?:[0-9]|\+|\(|\)| |\-){8,16}" required>
+          <input id="accountPhone" type="tel" minlength="8" maxlength="15" pattern="[0-9+\x28\x29 \x2D]{8,16}" required>
         </label>
 
         <p id="accountProfileMessage" class="muted"></p>
