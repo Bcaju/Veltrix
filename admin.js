@@ -888,7 +888,7 @@ function notifyNewChatMessage(chat) {
         (chat.lastMessage || "Шинэ мессеж ирлээ.").slice(0, 110),
       icon: "/logo.svg",
       badge: "/logo.svg",
-      tag: "veltrix-chat-" + chat.userId
+      tag: "phoenix-chat-" + chat.userId
     }
   );
 
